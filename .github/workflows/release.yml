@@ -1,0 +1,86 @@
+name: Build and Release
+
+on:
+  # 手动触发（支持从 Actions 页面点击运行）
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: '是否创建草稿（draft）Release'
+        required: false
+        default: false
+        type: boolean
+      prerelease:
+        description: '是否标记为预发布版'
+        required: false
+        default: false
+        type: boolean
+
+  # 自动触发：当推送以 'v' 开头的标签时（例如 v12.4.23）
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # 允许创建 Release 和上传附件
+  id-token: write   # 可选，如果需要 OIDC
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # ----- 1. 解析 addon.xml 获取版本号 -----
+      - name: 解析版本号
+        id: parse_version
+        run: |
+          # 使用 Python 的 xml.etree 安全提取 version 属性
+          python -c "
+          import os
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('addon.xml')
+          root = tree.getroot()
+          version = root.get('version')
+          if not version:
+              raise SystemExit('addon.xml 中未找到 version 属性')
+          print(f'VERSION={version}')
+          # 将版本号写入环境变量
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f'VERSION={version}\n')
+          " || exit 1
+        shell: bash
+
+      # ----- 2. 显示解析到的版本（调试） -----
+      - name: 显示版本号
+        run: |
+          echo "解析到的版本号：${{ steps.parse_version.outputs.VERSION }}"
+
+      # ----- 3. 打包（这里将整个仓库打包为 zip，可自定义） -----
+      - name: 打包文件
+        run: |
+          # 你可以修改打包的内容，例如只打包插件目录
+          # 这里以整个仓库为例
+          zip -r "plugin-${{ steps.parse_version.outputs.VERSION }}.zip" . -x ".git/*" -x ".github/*"
+        shell: bash
+
+      # ----- 4. 创建 Release 并上传附件 -----
+      - name: 创建 Release
+        uses: softprops/action-gh-release@v1
+        with:
+          # 标签名自动使用版本号（如 v12.4.23）
+          tag_name: v${{ steps.parse_version.outputs.VERSION }}
+          # Release 标题
+          name: v${{ steps.parse_version.outputs.VERSION }}
+          # 这里可以写详细的 Release Notes，也可以从文件读取
+          body: |
+            自动发布版本 v${{ steps.parse_version.outputs.VERSION }}
+            基于 addon.xml 中的版本号生成。
+          # 附件：支持通配符，上传我们刚才打包的 zip 文件
+          files: plugin-${{ steps.parse_version.outputs.VERSION }}.zip
+          # 从 workflow_dispatch 输入读取草稿/预发布设置
+          draft: ${{ github.event.inputs.draft || false }}
+          prerelease: ${{ github.event.inputs.prerelease || false }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
