@@ -56,11 +56,18 @@ jobs:
           echo "插件 ID: ${{ steps.parse_metadata.outputs.ID }}"
           echo "版本号: ${{ steps.parse_metadata.outputs.VERSION }}"
 
+      - uses: actions/checkout@v4
+        with:
+          path: ${{ steps.parse_metadata.outputs.ID }}
+
       # ----- 3. 打包，文件名 = ID-版本号.zip（连接符可自定义） -----
       - name: 打包文件
         run: |
-          # 这里用 "-" 连接，如果你想用 "_" 请修改为 ${{ steps.parse_metadata.outputs.ID }}_${{ steps.parse_metadata.outputs.VERSION }}.zip
-          zip -r "${{ steps.parse_metadata.outputs.ID }}-${{ steps.parse_metadata.outputs.VERSION }}.zip" . -x ".gitignore" -x ".git/*" -x ".github/*"
+          zip -r "${{ steps.parse_metadata.outputs.ID }}-${{ steps.parse_metadata.outputs.VERSION }}.zip" \
+          "${{ steps.parse_metadata.outputs.ID }}" \
+          -x "${{ steps.parse_metadata.outputs.ID }}/.git/*" \
+          -x "${{ steps.parse_metadata.outputs.ID }}/.github/*" \
+          -x "${{ steps.parse_metadata.outputs.ID }}/.gitignore"
         shell: bash
 
       # ----- 4. 创建 Release 并上传附件 -----
