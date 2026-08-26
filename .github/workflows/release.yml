@@ -60,7 +60,7 @@ jobs:
       - name: 打包文件
         run: |
           # 这里用 "-" 连接，如果你想用 "_" 请修改为 ${{ steps.parse_metadata.outputs.ID }}_${{ steps.parse_metadata.outputs.VERSION }}.zip
-          zip -r "${{ steps.parse_metadata.outputs.ID }}-${{ steps.parse_metadata.outputs.VERSION }}.zip" . -x ".git/*" -x ".github/*"
+          zip -r "${{ steps.parse_metadata.outputs.ID }}-${{ steps.parse_metadata.outputs.VERSION }}.zip" . -x ".gitignore" -x ".git/*" -x ".github/*"
         shell: bash
 
       # ----- 4. 创建 Release 并上传附件 -----
