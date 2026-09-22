@@ -27,6 +27,7 @@ Shuffled = [False, False, False]
 PlaybackRate = [1.0, 1.0, 1.0]
 PlaylistKodi = [[], [], []]
 PlaylistEmby = [[], [], []]
+PlaylistLock = threading.Lock()
 PlayingItem = [{}, 0, 0, 0, None, 0, "", ""] # EmbySessionData (QueuedPlayingItem), IntroStartPositionTicks, IntroEndPositionTicks, CreditsPositionTicks, EmbyServer, PlayerId, KodiMediaType, Filename
 PlayingItemInit = [{}, 0, 0, 0, None, 0, "", ""]
 QueuedPlayingItem = []
@@ -458,7 +459,12 @@ def PlayerCommands():
                 continue
 
             if PlayingItem[4] and PlayingItem[4].EmbySession:
-                playerops.RemoteCommand(PlayingItem[4].ServerData['ServerId'], PlayingItem[4].EmbySession[0]['Id'], "stop")
+                # playerops.RemoteCommand(PlayingItem[4].ServerData['ServerId'], PlayingItem[4].EmbySession[0]['Id'], "stop")
+                # 改为异步
+                utils.start_thread(
+                    playerops.RemoteCommand,
+                    (PlayingItem[4].ServerData['ServerId'], PlayingItem[4].EmbySession[0]['Id'], "stop")
+                )
 
             VideoPlaybackOld = VideoPlayback
 
@@ -574,6 +580,14 @@ def parse_repeat(Data):
 
     return "RepeatNone"
 
+def async_session_stop(server, playing_item, playlist_kodi, playlist_emby, index):
+    try:
+        result = server.API.session_stop(playing_item, playlist_kodi, playlist_emby)
+        with PlaylistLock:
+            PlaylistEmby[index] = result
+    except Exception as e:
+        xbmc.log(f"EMBY.helper.player: async session_stop error: {e}", 3)
+            
 def stop_playback(delete, PlaybackEnded):
     global TrackerPaused
     global VideoPlayback
@@ -605,7 +619,11 @@ def stop_playback(delete, PlaybackEnded):
     if not utils.RemoteMode:
         utils.ItemSkipUpdate.append(str(PlayingItemLocal[0]['ItemId'])) # Skip Emby progress updates as Kodi keeps track
 
-    PlaylistEmby[PlayingItemLocal[5]] = PlayingItemLocal[4].API.session_stop(PlayingItemLocal[0], PlaylistKodi[PlayingItemLocal[5]], PlaylistEmby[PlayingItemLocal[5]])
+    # PlaylistEmby[PlayingItemLocal[5]] = PlayingItemLocal[4].API.session_stop(PlayingItemLocal[0], PlaylistKodi[PlayingItemLocal[5]], PlaylistEmby[PlayingItemLocal[5]])
+    utils.start_thread(
+    async_session_stop,
+    (PlayingItemLocal[4], PlayingItemLocal[0], PlaylistKodi[PlayingItemLocal[5]], PlaylistEmby[PlayingItemLocal[5]], PlayingItemLocal[5])
+    )
     close_SkipIntroDialog()
     close_SkipCreditsDialog()
 
