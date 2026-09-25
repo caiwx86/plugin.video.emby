@@ -798,66 +798,98 @@ def GetRequest(client, Payload, isDelayedContent, isPicture, isAudio, isVideo):
     LoadData(MetaData, client)
     return
 
-# Load SRT subtitles
+# Load the preferred external or embedded subtitle stream.
 def SubTitlesAdd(MetaData):
-    if not MetaData['MediaSources'][MetaData['SelectionIndexMediaSource']][3]:
+    MediaSource = MetaData['MediaSources'][MetaData['SelectionIndexMediaSource']]
+    SubtitleStreams = MediaSource[3]
+
+    if not SubtitleStreams:
         return
 
-    CounterSubTitle = 0
-    DefaultSubtitlePath = ""
     EnableSubtitle = False
-    ExternalSubtitle = False
+    FileSettings = None
 
-    for Subtitle in MetaData['MediaSources'][MetaData['SelectionIndexMediaSource']][3]:
-        if Subtitle['external']:
-            CounterSubTitle += 1
-            ExternalSubtitle = True
+    # Read the Kodi preference once. It applies to the file, not to an
+    # individual subtitle stream.
+    if not MetaData['isDynamic']:
+        videoDB = dbio.DBOpenRO("video", "http_Query")
+        FileSettings = videoDB.get_FileSettings(MetaData['KodiFileId'])
+        dbio.DBCloseRO("video", "http_Query")
 
-            # Get Subtitle Settings
-            if not MetaData['isDynamic']:
-                videoDB = dbio.DBOpenRO("video", "http_Query")
-                FileSettings = videoDB.get_FileSettings(MetaData['KodiFileId'])
-                dbio.DBCloseRO("video", "http_Query")
-            else:
-                FileSettings = []
+    if FileSettings:
+        EnableSubtitle = bool(FileSettings[9])
+    else:
+        EnableSubtitle = EnableSubtitleDefault
 
-            if FileSettings:
-                EnableSubtitle = bool(FileSettings[9])
-            else:
-                EnableSubtitle = EnableSubtitleDefault
+    def is_default(Subtitle):
+        return Subtitle.get('Default', False) or "(default" in Subtitle.get('DisplayTitle', '').lower()
 
-            if Subtitle['language']:
-                SubtileLanguage = Subtitle['language']
-            else:
-                SubtileLanguage = "undefined"
+    def is_default_ass(Subtitle):
+        return is_default(Subtitle) and Subtitle.get('Codec', '').lower() in ("ass", "ssa")
 
-            BinaryData = utils.EmbyServers[MetaData['ServerId']].API.get_Subtitle_Binary(MetaData['EmbyId'], MetaData['MediaSources'][MetaData['SelectionIndexMediaSource']][0]['Id'], Subtitle['Index'], Subtitle['Codec'])
+    def matches_preference(Subtitle):
+        Title = Subtitle.get('DisplayTitle', '').lower()
+        return SubtitlesLanguageDefault and (SubtitlesLanguageDefault in Title or (SubtitlesLanguageDefault == "forced_only" and "forced" in Title))
 
-            if MetaData['EmbyId'] != EmbyIdCurrentlyPlaying: # check if Kodi is still playing the same file
-                del BinaryData
-                return
+    # Fetching every external subtitle delays playback and wastes bandwidth.
+    # The order keeps Emby's default track authoritative on all platforms.
+    PreferredSubtitle = next((Subtitle for Subtitle in SubtitleStreams if Subtitle['external'] and is_default_ass(Subtitle)), None)
+    PreferredSubtitle = PreferredSubtitle or next((Subtitle for Subtitle in SubtitleStreams if not Subtitle['external'] and is_default_ass(Subtitle)), None)
+    PreferredSubtitle = PreferredSubtitle or next((Subtitle for Subtitle in SubtitleStreams if Subtitle['external'] and is_default(Subtitle)), None)
+    PreferredSubtitle = PreferredSubtitle or next((Subtitle for Subtitle in SubtitleStreams if not Subtitle['external'] and is_default(Subtitle)), None)
+    PreferredSubtitle = PreferredSubtitle or next((Subtitle for Subtitle in SubtitleStreams if Subtitle['external'] and matches_preference(Subtitle)), None)
+    PreferredSubtitle = PreferredSubtitle or next((Subtitle for Subtitle in SubtitleStreams if not Subtitle['external'] and matches_preference(Subtitle)), None)
 
-            if BinaryData:
-                SubtitleCodec = Subtitle['Codec']
-                Path = f"{utils.FolderEmbyTemp}{utils.valid_Filename(f'{CounterSubTitle}.{SubtileLanguage}.{SubtitleCodec}')}"
-                utils.writeFile(Path, BinaryData)
-                del BinaryData
+    ExternalSubtitleStreams = [Subtitle for Subtitle in SubtitleStreams if Subtitle['external']]
 
-                if SubtitlesLanguageDefault in Subtitle['DisplayTitle'].lower():
-                    DefaultSubtitlePath = Path
+    if not PreferredSubtitle and not ExternalSubtitleStreams:
+        return
 
-                    if SubtitlesLanguageDefault == "forced_only" and "forced" in Subtitle['DisplayTitle'].lower():
-                        DefaultSubtitlePath = Path
-                    else:
-                        playerops.AddSubtitle(Path)
-                else:
-                    playerops.AddSubtitle(Path)
+    IsDefaultSubtitle = PreferredSubtitle and is_default(PreferredSubtitle)
 
-    if ExternalSubtitle:
-        if DefaultSubtitlePath:
-            playerops.AddSubtitle(DefaultSubtitlePath)
+    if PreferredSubtitle:
+        xbmc.log(f"EMBY.hooks.webservice: Selected subtitle: {PreferredSubtitle.get('DisplayTitle', 'unknown')} / external={PreferredSubtitle['external']}", 1) # LOGINFO
 
-        playerops.SetSubtitle(EnableSubtitle)
+    # Put the preferred external subtitle first so it becomes available as
+    # early as possible. Load the remaining tracks afterwards for Kodi's
+    # subtitle menu, then add the preferred file once more to keep it active.
+    if PreferredSubtitle and PreferredSubtitle['external']:
+        ExternalSubtitleStreams = [PreferredSubtitle] + [Subtitle for Subtitle in ExternalSubtitleStreams if Subtitle is not PreferredSubtitle]
+
+    PreferredSubtitlePath = ""
+
+    for CounterSubTitle, Subtitle in enumerate(ExternalSubtitleStreams, 1):
+        Language = Subtitle.get('language') or "undefined"
+        Codec = Subtitle.get('Codec', '')
+        BinaryData = utils.EmbyServers[MetaData['ServerId']].API.get_Subtitle_Binary(MetaData['EmbyId'], MediaSource[0]['Id'], Subtitle['Index'], Codec)
+
+        if MetaData['EmbyId'] != EmbyIdCurrentlyPlaying: # check if Kodi is still playing the same file
+            del BinaryData
+            return
+
+        if BinaryData:
+            Path = f"{utils.FolderEmbyTemp}{utils.valid_Filename(f'{CounterSubTitle}.{Language}.{Codec}')}"
+            utils.writeFile(Path, BinaryData)
+            del BinaryData
+
+            if Subtitle is PreferredSubtitle:
+                PreferredSubtitlePath = Path
+
+            playerops.AddSubtitle(Path)
+
+    if PreferredSubtitle and PreferredSubtitle['external']:
+        if PreferredSubtitlePath and not playerops.AddSubtitle(PreferredSubtitlePath):
+            return
+    elif PreferredSubtitle:
+        KodiSubtitleIndex = MediaSource[0]['IndexMappingSubtitle'].get(str(PreferredSubtitle['Index']), -1)
+
+        if KodiSubtitleIndex == -1 or not playerops.SelectSubtitle(KodiSubtitleIndex):
+            return
+
+    if IsDefaultSubtitle and not FileSettings:
+        EnableSubtitle = True
+
+    playerops.SetSubtitle(EnableSubtitle)
 
 def LoadData(MetaData, client):
     # Check transcoding

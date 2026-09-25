@@ -61,6 +61,8 @@ def load_MetaData(Payload, isPicture, isAudio):
             for IndexSub, MediaData in enumerate(MediaDatas):
                 if IndexSub == 0:
                     MediaSourceInfos = MediaData.split(":")
+                    MediaSources[Index][0]['IndexMappingSubtitle'] = {}
+                    KodiStreamSubtitleIndex = 0
 
                     for MediaSourceInfoIndex, MediaSourceInfo in enumerate(MediaSourceInfos):
                         if MediaSourceInfoIndex == 0:
@@ -127,8 +129,12 @@ def load_MetaData(Payload, isPicture, isAudio):
                                 MediaSources[Index][3][SubtitleStreamIndex]['external'] = bool(int(SubtitleStreamInfo))
                             elif SubtitleStreamInfoIndex == 3:
                                 MediaSources[Index][3][SubtitleStreamIndex]['Index'] = SubtitleStreamInfo
+                                MediaSources[Index][0]['IndexMappingSubtitle'][str(SubtitleStreamInfo)] = KodiStreamSubtitleIndex
+                                KodiStreamSubtitleIndex += 1
                             elif SubtitleStreamInfoIndex == 4:
                                 MediaSources[Index][3][SubtitleStreamIndex]['Codec'] = SubtitleStreamInfo
+                            elif SubtitleStreamInfoIndex == 5:
+                                MediaSources[Index][3][SubtitleStreamIndex]['Default'] = bool(int(SubtitleStreamInfo))
 
         MetaData.update({'KodiId': Data[1], 'KodiFileId': Data[2]})
 

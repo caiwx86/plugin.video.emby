@@ -136,13 +136,38 @@ def GetPlayerFilepath():
     return ""
 
 def AddSubtitle(Path):
+    # The subtitle worker can run immediately after the redirect, before the
+    # CoreELEC player has opened the stream.  Wait for playback so the request
+    # is not silently discarded by the isPlaying() check below.
+    if not wait_AVStarted():
+        xbmc.log(f"EMBY.helper.playerops: [ AddSubtitle ] AVstart timeout: {Path}", 3) # LOGERROR
+        return False
+
     if XbmcPlayer.isPlaying():
         try:
             # Native Methode zum Hinzufügen eines Untertitels
             XbmcPlayer.setSubtitles(Path)
             xbmc.log(f"EMBY.helper.playerops: [ AddSubtitle ] {Path}", 1)
+            return True
         except:
-            pass
+            xbmc.log(f"EMBY.helper.playerops: [ AddSubtitle ] failed: {Path}", 3) # LOGERROR
+
+    return False
+
+def SelectSubtitle(Index):
+    if not wait_AVStarted():
+        xbmc.log(f"EMBY.helper.playerops: [ SelectSubtitle ] AVstart timeout: {Index}", 3) # LOGERROR
+        return False
+
+    if XbmcPlayer.isPlaying():
+        try:
+            XbmcPlayer.setSubtitleStream(Index)
+            xbmc.log(f"EMBY.helper.playerops: [ SelectSubtitle ] {Index}", 1) # LOGINFO
+            return True
+        except:
+            xbmc.log(f"EMBY.helper.playerops: [ SelectSubtitle ] failed: {Index}", 3) # LOGERROR
+
+    return False
 
 def SetSubtitle(Enable):
     if XbmcPlayer.isPlaying():

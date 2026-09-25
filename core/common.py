@@ -342,7 +342,8 @@ def set_path_filename(Item, ServerId, MediaSource, isDynamic=False):
                     SubData[1].append(f"{KodiAudioStream['DisplayTitle'].replace(':', '<;>')}:{KodiAudioStream['codec'].replace(':', '<;>')}:{KodiAudioStream['BitRate'] or 0}:{KodiAudioStream['Index']}")
 
                 for KodiSubtitleStream in MediaSourceItem['KodiStreams']['Subtitle']:
-                    SubData[2].append(f"{KodiSubtitleStream['language'].replace(':', '<;>')}:{KodiSubtitleStream['DisplayTitle'].replace(':', '<;>')}:{KodiSubtitleStream['external']}:{KodiSubtitleStream['Index']}:{KodiSubtitleStream['codec'].replace(':', '<;>')}")
+                    isDefault = 1 if KodiSubtitleStream['default'] else 0
+                    SubData[2].append(f"{KodiSubtitleStream['language'].replace(':', '<;>')}:{KodiSubtitleStream['DisplayTitle'].replace(':', '<;>')}:{KodiSubtitleStream['external']}:{KodiSubtitleStream['Index']}:{KodiSubtitleStream['codec'].replace(':', '<;>')}:{isDefault}")
 
                 SubData[0] = "><".join(SubData[0])
                 SubData[1] = "><".join(SubData[1])
@@ -544,7 +545,7 @@ def set_streams(Item):
                 else:
                     IsExternal = "0"
 
-                MediaSource['KodiStreams']['Subtitle'].append({'Index': Stream.get('Index', "0"), 'language': Stream.get('Language', "undefined"), 'DisplayTitle': Stream.get('DisplayTitle', "undefined").replace(chr(1), "").replace(chr(0), ""), 'codec': Codec, 'external': IsExternal})
+                MediaSource['KodiStreams']['Subtitle'].append({'Index': Stream.get('Index', "0"), 'language': Stream.get('Language', "undefined"), 'DisplayTitle': Stream.get('DisplayTitle', "undefined").replace(chr(1), "").replace(chr(0), ""), 'codec': Codec, 'external': IsExternal, 'default': Stream.get('IsDefault', False)})
 
 def set_RunTimeTicks(Item):
     if 'RunTimeTicks' in Item:
