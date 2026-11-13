@@ -1,3 +1,9 @@
+12.5.2.3
+=============
+improve playback start: prioritize playback over artwork in the webservice queue, reduce redirect latency and avoid an extra wait for Emby readiness
+
+
+
 12.5.2.2
 =============
 fix ISO playback in addon/http mode: ISO files now use Kodi path substitution, all other content keeps the HTTP webservice path

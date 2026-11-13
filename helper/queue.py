@@ -1,4 +1,5 @@
 import collections
+import heapq
 import threading
 
 class Queue:
@@ -41,3 +42,23 @@ class Queue:
     def isEmpty(self):
         with self.ThreadCondition:
             return not self.ItemsQueue
+
+class PriorityQueue:
+    def __init__(self):
+        self.ItemsQueue = []
+        self.Counter = 0
+        self.ThreadCondition = threading.Condition(threading.Lock())
+
+    def put(self, priority, data):
+        with self.ThreadCondition:
+            self.Counter += 1
+            heapq.heappush(self.ItemsQueue, (priority, self.Counter, data))
+            self.ThreadCondition.notify_all()
+
+    def get(self):
+        while True:
+            with self.ThreadCondition:
+                if self.ItemsQueue:
+                    return heapq.heappop(self.ItemsQueue)[2]
+
+                self.ThreadCondition.wait(timeout=0.1)

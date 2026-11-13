@@ -22,9 +22,41 @@ DelayedContent = {}
 DelayedContentLock = threading.Lock()
 EmbyIdCurrentlyPlaying = 0
 MaxWorkers = utils.WebserviceWorkers
-WorkerQueue = queue.Queue()
+WorkerQueue = queue.PriorityQueue()
 AsyncCommandQueue = queue.Queue()
 DelayedContentCondition = threading.Condition(threading.Lock())
+ImageExtensions = (".jpg", ".jpeg", ".jpe", ".jfif", ".png", ".bmp", ".gif", ".tbn", ".tiff", ".webp", ".avif", ".heic", ".heif", ".apng", ".svg", ".svgz")
+
+def get_WorkerPriority(ClientSocket):
+    # Playback and API requests must not wait behind artwork requests.
+    if not hasattr(socket, "MSG_PEEK"):
+        return 0
+
+    try:
+        ClientSocket.setblocking(False)
+
+        try:
+            Data = ClientSocket.recv(1024, socket.MSG_PEEK)
+        finally:
+            ClientSocket.setblocking(True)
+    except Exception:
+        return 0
+
+    if not Data:
+        return 0
+
+    try:
+        RequestLine = Data.split(b"\r\n", 1)[0].decode("utf-8", "ignore")
+        Parts = RequestLine.split(" ")
+        Method = Parts[0].upper()
+        Path = Parts[1].lower() if len(Parts) > 1 else ""
+    except Exception:
+        return 0
+
+    if Method in ("GET", "HEAD") and ("/picture/" in Path or Path.split("?")[0].endswith(ImageExtensions)):
+        return 1
+
+    return 0
 xbmc.log(f"EMBY.hooks.webservice: Number of workers {MaxWorkers}", 1) # LOGINFO
 
 # Load binary files once
@@ -141,7 +173,7 @@ def close():
         AsyncCommandQueue.put("QUIT")
 
         for _ in range(MaxWorkers):
-            WorkerQueue.put("QUIT")
+            WorkerQueue.put(0, "QUIT")
 
         try:
             Socket.close()
@@ -162,7 +194,7 @@ def Listen():
         except:
             continue
 
-        WorkerQueue.put(ClinetSocket)
+        WorkerQueue.put(get_WorkerPriority(ClinetSocket), ClinetSocket)
 
     if utils.DebugLog: xbmc.log("EMBY.hooks.webservice (DEBUG): THREAD: ---<[ webservice/57342 ]", 1) # LOGDEBUG
 
@@ -170,13 +202,17 @@ def worker_Query(WorkerNumber):  # thread by caller
     if utils.DebugLog: xbmc.log(f"EMBY.hooks.webservice (DEBUG): THREAD: --->[ worker_Query/{WorkerNumber} ]", 1) # LOGDEBUG
 
     while Running:
-        Data = WorkerQueue.get()
+        client = WorkerQueue.get()
 
-        if Data == "QUIT":
+        if client == "QUIT":
             if utils.DebugLog: xbmc.log(f"EMBY.hooks.webservice (DEBUG): THREAD: ---<[ worker_Query/{WorkerNumber} ] quit", 1) # LOGDEBUG
             return
 
-        client = Data
+        try:
+            client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except:
+            pass
+
         client.settimeout(None)
         data = client.recv(16384).decode()
         if utils.DebugLog: xbmc.log(f"EMBY.hooks.webservice: [ worker_Query/{WorkerNumber} ] Incoming Data: {data}", 1) # LOGDEBUG
@@ -547,8 +583,6 @@ def build_Path(MetaData, Data):
     return Path
 
 def send_redirect(client, MetaData, Data, AddCache=True):
-    utils.close_busyDialog()
-
     if AddCache:
         httpcache.add(MetaData, Data)
 
@@ -572,6 +606,9 @@ def send_redirect(client, MetaData, Data, AddCache=True):
         client.send(SendData)
     except:
         set_DelayedContent(MetaData['ETag'], SendData, 0, 0)
+
+    if utils.BusyDialogClose:
+        utils.start_thread(utils.close_busyDialog, ())
 
 def GetRequest(client, Payload, isDelayedContent, isPicture, isAudio, isVideo):
     # Delayed contents are used for user inputs (selection box for e.g. multicontent versions, transcoding selection etc.)
@@ -1188,6 +1225,9 @@ def wait_for_Embyserver(client, ServerId, MetaData):
                 CounterOnlineCondintion += 1
 
             CounterRetry += 1
+
+            if ServerId in utils.EmbyServers and utils.EmbyServers[ServerId].library.SettingsLoaded:
+                break
 
             if utils.SystemShutdown:
                 if utils.DebugLog: xbmc.log(f"EMBY.hooks.webservice (DEBUG): CONDITION: ---<[ EmbyServerOnlineCondition ] {ServerId} Kodi shutdown", 1)
