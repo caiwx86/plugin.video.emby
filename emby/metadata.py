@@ -153,9 +153,9 @@ def load_MetaData(Payload, isPicture, isAudio):
                             elif SubtitleStreamInfoIndex == 4:
                                 MediaSources[Index][3][SubtitleStreamIndex]['Codec'] = SubtitleStreamInfo
                             elif SubtitleStreamInfoIndex == 5:
-                                MediaSources[Index][3][SubtitleStreamIndex]['Forced'] = bool(int(SubtitleStreamInfo))
-                            elif SubtitleStreamInfoIndex == 6:
                                 MediaSources[Index][3][SubtitleStreamIndex]['Default'] = bool(int(SubtitleStreamInfo))
+                            elif SubtitleStreamInfoIndex == 6:
+                                MediaSources[Index][3][SubtitleStreamIndex]['Forced'] = bool(int(SubtitleStreamInfo))
 
     MetaData.update({'MediaSources': MediaSources, 'Payload': Payload, 'KodiType': MediaIdMapping[Data[0]], 'ServerId': ServerId, 'EmbyId': EmbyId, 'MediaType': Data[0], "DelayedContentSet": False, "SelectionIndexMediaSource": 0, "SelectionIndexVideoStream": 0, "SelectionIndexAudioStream": 0, "SelectionIndexSubtitleStream": -1})
     return MetaData

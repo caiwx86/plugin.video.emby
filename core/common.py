@@ -357,17 +357,19 @@ def set_path_filename(Item, ServerId, MediaSource, isDynamic=False):
                     SubData[1].append(f"{KodiAudioStream['DisplayTitle'].replace(':', '<;>')}:{KodiAudioStream['codec'].replace(':', '<;>')}:{KodiAudioStream['BitRate'] or 0}:{KodiAudioStream['Index']}")
 
                 for KodiSubtitleStream in MediaSourceItem['KodiStreams']['Subtitle']:
-                    if KodiSubtitleStream['forced']:
-                        isForced = 1
-                    else:
-                        isForced = 0
-
+                    # Keep "default" as the sixth field so metadata cached by earlier
+                    # fork versions stays readable; "forced" is appended as seventh.
                     if KodiSubtitleStream['default']:
                         isDefault = 1
                     else:
                         isDefault = 0
 
-                    SubData[2].append(f"{KodiSubtitleStream['language'].replace(':', '<;>')}:{KodiSubtitleStream['DisplayTitle'].replace(':', '<;>')}:{KodiSubtitleStream['external']}:{KodiSubtitleStream['Index']}:{KodiSubtitleStream['codec'].replace(':', '<;>')}:{isForced}:{isDefault}")
+                    if KodiSubtitleStream['forced']:
+                        isForced = 1
+                    else:
+                        isForced = 0
+
+                    SubData[2].append(f"{KodiSubtitleStream['language'].replace(':', '<;>')}:{KodiSubtitleStream['DisplayTitle'].replace(':', '<;>')}:{KodiSubtitleStream['external']}:{KodiSubtitleStream['Index']}:{KodiSubtitleStream['codec'].replace(':', '<;>')}:{isDefault}:{isForced}")
 
                 SubData[0] = "><".join(SubData[0])
                 SubData[1] = "><".join(SubData[1])
