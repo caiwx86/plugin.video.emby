@@ -1,17 +1,17 @@
 import json
 import xbmc
-from helper import utils
+from helper import utils, copy
 from . import common, musicartist, musicalbum, musicgenre
 
 
 class Audio:
-    def __init__(self, EmbyServer, SQLs):
-        self.EmbyServer = EmbyServer
+    def __init__(self, Library, SQLs):
+        self.Library = Library
         self.SQLs = SQLs.copy()
         self.SQLs['video'] = None
-        self.MusicArtistObject = musicartist.MusicArtist(self.EmbyServer, self.SQLs)
-        self.MusicAlbumObject = musicalbum.MusicAlbum(self.EmbyServer, self.SQLs)
-        self.MusicGenreObject = musicgenre.MusicGenre(self.EmbyServer, self.SQLs)
+        self.MusicArtistObject = musicartist.MusicArtist(Library, self.SQLs)
+        self.MusicAlbumObject = musicalbum.MusicAlbum(Library, self.SQLs)
+        self.MusicGenreObject = musicgenre.MusicGenre(Library, self.SQLs)
 
     def update_SQLs(self, SQLs): # When paused, databases are closed and re-opened -> Update database
         self.SQLs = SQLs.copy()
@@ -27,7 +27,7 @@ class Audio:
 
         if utils.DebugLog: xbmc.log(f"EMBY.core.audio (DEBUG): Process item: {Item['Name']}", 1) # DEBUG
 
-        if not common.load_ExistingItem(Item, self.EmbyServer, self.SQLs["emby"], "Audio"):
+        if not common.load_ExistingItem(Item, self.Library, self.SQLs["emby"], "Audio"):
             return False
 
         if 'ExtraType' in Item:
@@ -37,20 +37,25 @@ class Audio:
                 return False
 
         common.set_RunTimeTicks(Item)
-        common.set_common(Item, self.EmbyServer.ServerData['ServerId'], False, IncrementalSync)
+        common.set_common(Item, self.Library.ServerData['ServerId'], False, IncrementalSync)
         Item["MusicAlbum"] = Item.get('Album', None)
         Item["MusicAlbumId"] = Item.get('AlbumId', None)
 
         # Track and disc number
-        if Item['IndexNumber'] and Item['ParentIndexNumber']:
-            Item['IndexNumber'] = Item['ParentIndexNumber'] * 65536 + Item['IndexNumber']
+        if not Item['ParentIndexNumber']:
+            Item['ParentIndexNumber'] = 0
 
-        if not Item['IndexNumber']:
-            Item['IndexNumber'] = 0 # Mymusic.db does not execpt NULL, it would result in invalid album disc numbers
+        common.set_TracksByMediasourceName(Item)
+
+        if Item['IndexNumber']:
+            Item['KodiDiscTrack'] = Item['ParentIndexNumber'] * 65536 + Item['IndexNumber']
+        else:
+            Item['IndexNumber'] = 0
+            Item['KodiDiscTrack'] = 0 # Mymusic.db does not execpt NULL, it would result in invalid album disc numbers
 
         common.set_streams(Item)
-        common.set_chapters(Item, self.EmbyServer.ServerData['ServerId'])
-        common.set_path_filename(Item, self.EmbyServer.ServerData['ServerId'], None)
+        common.set_chapters(Item, self.Library.ServerData['ServerId'])
+        common.set_path_filename(Item, self.Library.ServerData['ServerId'], None)
         Item['KodiPathId'] = self.SQLs["music"].get_add_path(Item['KodiPath'])
 
         if Item['MediaSources'][0]['KodiStreams']['Audio']:
@@ -71,15 +76,18 @@ class Audio:
             if Item['Name'] == "--NO INFO--": # Skip injected items updates
                 return False
 
-            UpdateItem = Item.copy()
+            UpdateItem = copy.Object(Item)
             UpdateKodiItemIdCurrent = KodiItemIds[Index]
             UpdateItem['LibraryId'] = LibraryId
+            common.set_path_filename(UpdateItem, self.Library.ServerData['ServerId'], None)
+            UpdateItem['KodiPathId'] = self.SQLs["music"].get_add_path(UpdateItem['KodiPath'])
             EmbyMusicArtistIds, EmbyMusicGenreIds = self.set_metadata(UpdateItem, IncrementalSync)
             self.SQLs["music"].common_db.delete_artwork(UpdateKodiItemIdCurrent, "song")
             self.SQLs["music"].delete_link_song_artist(UpdateKodiItemIdCurrent)
             KodiAlbumIds, KodiAlbumLibraryIds = self.SQLs["emby"].get_MusicAlbum_by_EmbyId(UpdateItem['MusicAlbumId'])
             KodiAlbumId = KodiAlbumIds[KodiAlbumLibraryIds.index(UpdateItem['LibraryId'])]
-            self.SQLs["music"].update_song(UpdateKodiItemIdCurrent, UpdateItem['KodiPathId'], KodiAlbumId, UpdateItem['ArtistItemsName'], UpdateItem['MusicGenre'], UpdateItem['Name'], UpdateItem['IndexNumber'], UpdateItem['KodiRunTimeTicks'], UpdateItem['KodiPremiereDate'], UpdateItem['KodiProductionYear'], UpdateItem['KodiFilename'], UpdateItem['CommunityRating'], UpdateItem['Overview'], UpdateItem['KodiDateCreated'], BitRate, SampleRate, Channels, UpdateItem['ProviderIds']['MusicBrainzTrack'], UpdateItem['ArtistItemsSortName'], UpdateItem['KodiPath'], PlaylistId)
+            self.SQLs["music"].update_album_info_by_audio(KodiAlbumId, UpdateItem['ParentIndexNumber'], UpdateItem['IndexNumber'], bool(PlaylistId))
+            self.SQLs["music"].update_song(UpdateKodiItemIdCurrent, UpdateItem['KodiPathId'], KodiAlbumId, UpdateItem['ArtistItemsName'], UpdateItem['MusicGenre'], UpdateItem['Name'], UpdateItem['KodiDiscTrack'], UpdateItem['KodiRunTimeTicks'], UpdateItem['KodiPremiereDate'], UpdateItem['KodiProductionYear'], UpdateItem['KodiFilename'], UpdateItem['CommunityRating'], UpdateItem['Overview'], UpdateItem['KodiDateCreated'], BitRate, SampleRate, Channels, UpdateItem['ProviderIds']['MusicBrainzTrack'], UpdateItem['ArtistItemsSortName'], UpdateItem['KodiPath'], PlaylistId)
             self.set_links(UpdateItem, UpdateKodiItemIdCurrent)
             common.remove_old_EmbyMusicArtist(self.SQLs["emby"], UpdateItem['Id'], UpdateItem['LibraryId'], EmbyMusicArtistIds, self.MusicArtistObject, IncrementalSync)
             common.remove_old_EmbyMusicGenre(self.SQLs["emby"], UpdateItem['Id'], UpdateItem['LibraryId'], EmbyMusicGenreIds, self.MusicGenreObject, IncrementalSync)
@@ -99,7 +107,8 @@ class Audio:
             EmbyMusicArtistIds, EmbyMusicGenreIds = self.set_metadata(Item, IncrementalSync)
             KodiAlbumIds, KodiAlbumLibraryIds = self.SQLs["emby"].get_MusicAlbum_by_EmbyId(Item['MusicAlbumId'])
             KodiAlbumId = KodiAlbumIds[KodiAlbumLibraryIds.index(Item['LibraryId'])]
-            KodiItemIdCurrent = self.SQLs["music"].add_song(Item['KodiPathId'], KodiAlbumId, Item['ArtistItemsName'], Item['MusicGenre'], Item['Name'], Item['IndexNumber'], Item['KodiRunTimeTicks'], Item['KodiPremiereDate'], Item['KodiProductionYear'], Item['KodiFilename'], Item['CommunityRating'], Item['Overview'], Item['KodiDateCreated'], BitRate, SampleRate, Channels, Item['ProviderIds']['MusicBrainzTrack'], Item['ArtistItemsSortName'], Item['LibraryId'])
+            self.SQLs["music"].update_album_info_by_audio(KodiAlbumId, Item['ParentIndexNumber'], Item['IndexNumber'], bool(PlaylistId))
+            KodiItemIdCurrent = self.SQLs["music"].add_song(Item['KodiPathId'], KodiAlbumId, Item['ArtistItemsName'], Item['MusicGenre'], Item['Name'], Item['KodiDiscTrack'], Item['KodiRunTimeTicks'], Item['KodiPremiereDate'], Item['KodiProductionYear'], Item['KodiFilename'], Item['CommunityRating'], Item['Overview'], Item['KodiDateCreated'], BitRate, SampleRate, Channels, Item['ProviderIds']['MusicBrainzTrack'], Item['ArtistItemsSortName'], Item['LibraryId'])
             Item['LibraryIds'] = common.add_Ids_SingleContent(LibraryIds, Item['LibraryId'])
             Item['KodiItemId'] = common.add_Ids_SingleContent(KodiItemIds, KodiItemIdCurrent)
             Item['KodiItemIdNew'] = KodiItemIdCurrent
@@ -116,10 +125,10 @@ class Audio:
         return not Item['UpdateItem']
 
     def set_metadata(self, Item, IncrementalSync):
-        common.set_MetaItems(Item, self.SQLs, self.MusicGenreObject, self.EmbyServer, "MusicGenre", 'GenreItems', "music", IncrementalSync, Item['LibraryId'])
-        common.set_MetaItems(Item, self.SQLs, self.MusicArtistObject, self.EmbyServer, "MusicArtist", "Composers", "music", IncrementalSync, Item['LibraryId'])
-        common.set_MetaItems(Item, self.SQLs, self.MusicArtistObject, self.EmbyServer, "MusicArtist", "ArtistItems", "music", IncrementalSync, Item['LibraryId'])
-        common.set_ItemsDependencies(Item, self.SQLs, self.MusicAlbumObject, self.EmbyServer, "MusicAlbum", IncrementalSync, Item['LibraryId'])
+        common.set_MetaItems(Item, self.SQLs, self.MusicGenreObject, self.Library, "MusicGenre", 'GenreItems', "music", IncrementalSync, Item['LibraryId'])
+        common.set_MetaItems(Item, self.SQLs, self.MusicArtistObject, self.Library, "MusicArtist", "Composers", "music", IncrementalSync, Item['LibraryId'])
+        common.set_MetaItems(Item, self.SQLs, self.MusicArtistObject, self.Library, "MusicArtist", "ArtistItems", "music", IncrementalSync, Item['LibraryId'])
+        common.set_ItemsDependencies(Item, self.SQLs, self.MusicAlbumObject, self.Library, "MusicAlbum", IncrementalSync, Item['LibraryId'])
         EmbyMusicArtistIds = common.get_Artist_Ids(Item, True, False, True)
         EmbyMusicGenreIds = common.get_MusicGenre_Ids(Item)
         common.get_MusicArtistInfos(Item, "Composers", self.SQLs)
@@ -138,9 +147,9 @@ class Audio:
 
         common.set_Favorite(Item)
         common.set_playstate(Item)
-        self.SQLs["emby"].update_favourite(Item['Id'], Item['IsFavorite'], "Audio")
+        self.SQLs["emby"].update_favourite(Item['IsFavorite'], Item['Id'], "Audio")
 
-        if UpdateKodiFavorite:
+        if UpdateKodiFavorite and Item['Type'] != "Playlist":
             self.set_favorite(Item['IsFavorite'], Item)
 
         for KodiItemId in Item['KodiItemId'].split(","):
@@ -161,13 +170,14 @@ class Audio:
             return
 
         LibraryIdsRemove = ()
-        self.set_favorite(False, Item)
         LibraryIdStr = str(Item['LibraryId'])
         Item['LibraryIds'], Item['KodiItemId'], _, _ = self.SQLs["emby"].get_KodiIds_LibraryIds_from_ContentItem(Item['Id'], "Audio") # (Re)Load LibraryIds, KodiItemId as refreences could be modify data after
 
         if not Item['LibraryIds']:
             xbmc.log(f"EMBY.core.audio (DEBUG): SKIP DELETE, LibraryIds not found {Item['Id']} / {Item['LibraryId']}", 1) # DEBUGLOG
             return
+
+        self.set_favorite(False, Item)
 
         # Load Arrays
         LibraryIds = common.get_Ids_SingleContent(Item['LibraryIds'])
@@ -221,4 +231,4 @@ class Audio:
             if IsFavorite and not Item['KodiArtwork']['favourite'] or "Name" not in Item or "KodiFullPath" not in Item:
                 Item['KodiFullPath'], Item['KodiArtwork']['favourite'], Item['Name'] = self.SQLs["music"].get_favoriteData(KodiItemId)
 
-            utils.FavoriteQueue.put(((common.set_Favorites_Artwork_Overlay("Song", "Songs", Item['Id'], self.EmbyServer.ServerData['ServerId'], Item['KodiArtwork']['favourite']), IsFavorite, Item['KodiFullPath'], Item['Name'].replace('"', "'"), "media", 0),))
+            utils.FavoriteQueue.put(((common.set_Favorites_Artwork_Overlay("Song", "Songs", Item['Id'], self.Library.ServerData['ServerId'], Item['KodiArtwork']['favourite']), IsFavorite, Item['KodiFullPath'], Item['Name'].replace('"', "'"), "media", 0),))

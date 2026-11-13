@@ -2,7 +2,7 @@ import json
 import threading
 import xbmcvfs
 import xbmc
-from helper import pluginmenu, utils, playerops, xmls, player, queue, deduplicate, backup, cache
+from helper import pluginmenu, utils, playerops, xmls, player, queue, deduplicate, backup, cache, artworkcache
 from database import dbio
 from emby import emby, httpcache
 from . import webservice, favorites, themes
@@ -45,7 +45,7 @@ class monitor(xbmc.Monitor):
         elif method == "Playlist.OnClear":
             player.PlayerEventsQueue.put((("clear", data),))
         elif method == "Other.playback_failed": # youtube plugin
-            player.PlayerEventsQueue.put((("stop", '{"end":true}'),))
+            player.PlayerEventsQueue.put((("stop", '{"end":true, "fail":true}'),))
         elif method == "Other.playback_init": # youtube plugin
             player.PlayerEventsQueue.put((("playerid", '{"player":{"playerid":1}}'),))
         elif method == "Other.playback_started": # youtube plugin
@@ -133,19 +133,19 @@ def SystemEvents():
         elif SystemEvent[0] == 'Other.backupdelete':
             utils.start_thread(backup.Delete, ())
         elif SystemEvent[0] == 'Other.skinreload':
-            utils.start_thread(cache.reset_querycache, ()) # Clear Cache
+            utils.start_thread(cache.reset, ()) # Clear Cache
             xbmc.executebuiltin('ReloadSkin()')
             xbmc.log("EMBY.hooks.monitor: Reload skin by notification", 1) # LOGINFO
         elif SystemEvent[0] == 'Other.manageserver':
             utils.start_thread(pluginmenu.manage_servers, (ServerConnect,))
         elif SystemEvent[0] == 'Other.databasereset':
-            utils.start_thread(pluginmenu.databasereset, (favorites, ))
+            utils.start_thread(pluginmenu.databasereset, ())
         elif SystemEvent[0] == 'Other.nodesreset':
             utils.start_thread(utils.nodesreset, ())
         elif SystemEvent[0] == 'Other.databasevacuummanual':
             utils.start_thread(dbio.DBVacuum, ())
         elif SystemEvent[0] == 'Other.factoryreset':
-            utils.start_thread(pluginmenu.factoryreset, (False, favorites))
+            utils.start_thread(pluginmenu.factoryreset, (False,))
         elif SystemEvent[0] == 'Other.downloadreset':
             utils.start_thread(pluginmenu.downloadreset, ("",))
         elif SystemEvent[0] == 'Other.themedownload':
@@ -323,19 +323,18 @@ def VideoLibrary_OnUpdate():
             if 'Progress' in EmbyUpdateItem:
                 if 'PlayCount' in EmbyUpdateItem:
                     EmbyServer.API.set_progress(EmbyId, EmbyUpdateItem['Progress'], EmbyUpdateItem['PlayCount'])
-                    UpdateUserDataCached = ((str(EmbyId), 0, "", EmbyUpdateItem['PlayCount'], False),)
+                    cache.update_userdata_Kodi(str(EmbyId), ServerId, None, None, None, None, EmbyUpdateItem['PlayCount'])
                 else:
                     if not KodiDB:
                         KodiDB = dbio.DBOpenRO("video", "VideoLibrary_OnUpdate")
 
                     PlayCount = KodiDB.get_playcount(EmbyUpdateItem['KodiItemId'], EmbyUpdateItem['KodiType'])
                     EmbyServer.API.set_progress(EmbyId, EmbyUpdateItem['Progress'], PlayCount)
-                    UpdateUserDataCached = ((str(EmbyId), 0, "", PlayCount, False),)
+                    cache.update_userdata_Kodi(str(EmbyId), ServerId, None, None, None, None, PlayCount)
             else:
                 EmbyServer.API.set_played(EmbyId, EmbyUpdateItem['PlayCount'])
-                UpdateUserDataCached = ((str(EmbyId), None, "", EmbyUpdateItem['PlayCount'], False),)
+                cache.update_userdata_Kodi(str(EmbyId), ServerId, None, None, None, None, EmbyUpdateItem['PlayCount'])
 
-            cache.update_querycache_userdata(UpdateUserDataCached)
             xbmc.log(f"EMBY.hooks.monitor: VideoLibrary_OnUpdate ItemSkipUpdate: {utils.ItemSkipUpdate}", 1) # LOGINFO
 
 def ServerConnect(ServerSettings):
@@ -359,19 +358,22 @@ def settingschanged():
         if utils.DebugLog: xbmc.log("EMBY.hooks.monitor (DEBUG): THREAD: --->[ reload settings ]", 1) # LOGDEBUG
         utils.close_dialog(10146) # addoninformation
         RestartKodi = False
-        syncdatePrevious = utils.syncdate
-        synctimePrevious = utils.synctime
-        enablehttp2Previous = utils.enablehttp2
-        xspplaylistsPreviousValue = utils.xspplaylists
-        enableCoverArtPreviousValue = utils.enableCoverArt
-        maxnodeitemsPreviousValue = utils.maxnodeitems
-        AddonModePathPreviousValue = utils.AddonModePath
-        websocketenabledPreviousValue = utils.websocketenabled
-        curltimeoutsPreviousValue = utils.curltimeouts
-        curlBoxSetsToTagsPreviousValue = utils.BoxSetsToTags
-        DownloadPathPreviousValue = utils.DownloadPath
-        SyncFavoritesPreviousValue = utils.SyncFavorites
-        utils.InitSettings()
+
+        with utils.SafeLock(utils.SyncDateLock):
+            syncdatePrevious = utils.syncdate
+            synctimePrevious = utils.synctime
+            enablehttp2Previous = utils.enablehttp2
+            xspplaylistsPreviousValue = utils.xspplaylists
+            enableCoverArtPreviousValue = utils.enableCoverArt
+            maxnodeitemsPreviousValue = utils.maxnodeitems
+            AddonModePathPreviousValue = utils.AddonModePath
+            curltimeoutsPreviousValue = utils.curltimeouts
+            curlBoxSetsToTagsPreviousValue = utils.BoxSetsToTags
+            DownloadPathPreviousValue = utils.DownloadPath
+            SyncFavoritesPreviousValue = utils.SyncFavorites
+            utils.InitSettings()
+            syncdateCurrent = utils.syncdate
+            synctimeCurrent = utils.synctime
 
         # Http2 mode or curltimeouts changed, rebuild advanced settings -> restart Kodi
         if enablehttp2Previous != utils.enablehttp2 or curltimeoutsPreviousValue != utils.curltimeouts:
@@ -404,11 +406,6 @@ def settingschanged():
         if maxnodeitemsPreviousValue != utils.maxnodeitems:
             utils.nodesreset()
 
-        # Toggle websocket connection
-        if websocketenabledPreviousValue != utils.websocketenabled:
-            for EmbyServer in list(utils.EmbyServers.values()):
-                EmbyServer.toggle_websocket(utils.websocketenabled)
-
         # Toggle collection tags
         if curlBoxSetsToTagsPreviousValue != utils.BoxSetsToTags:
             for EmbyServer in list(utils.EmbyServers.values()):
@@ -426,14 +423,17 @@ def settingschanged():
             return
 
         # Manual adjusted sync time/date
-        if syncdatePrevious != utils.syncdate or synctimePrevious != utils.synctime:
-            xbmc.log("EMBY.hooks.monitor: [ Trigger KodiStartSync due to setting changed ]", 1) # LOGINFO
-            SyncTimestamp = f"{utils.syncdate} {utils.synctime}:00"
-            SyncTimestamp = utils.convert_to_gmt(SyncTimestamp)
+        if syncdatePrevious != syncdateCurrent or synctimePrevious != synctimeCurrent:
+            SyncTimestamp = utils.convert_to_gmt(f"{syncdateCurrent} {synctimeCurrent}:00")
 
-            for EmbyServer in list(utils.EmbyServers.values()):
-                EmbyServer.library.set_syncdate(SyncTimestamp)
-                utils.start_thread(EmbyServer.library.KodiStartSync, (False,))
+            if SyncTimestamp:
+                xbmc.log("EMBY.hooks.monitor: [ Trigger KodiStartSync due to setting changed ]", 1) # LOGINFO
+
+                for EmbyServer in list(utils.EmbyServers.values()):
+                    EmbyServer.library.set_syncdate(SyncTimestamp)
+                    utils.start_thread(EmbyServer.library.KodiStartSync, (False,))
+            else:
+                xbmc.log(f"EMBY.hooks.monitor: Invalid sync date/time: {syncdateCurrent} {synctimeCurrent}", 2) # LOGWARNING
 
         for EmbyServer in list(utils.EmbyServers.values()):
             EmbyServer.API.update_settings()
@@ -500,9 +500,11 @@ def get_digits(Text):
 def setup():
     # Wait for homescreen (Kodi fully loaded)
     if utils.DebugLog: xbmc.log("EMBY.hooks.monitor (DEBUG): --->[ wait for homescreen ]", 1) # LOGDEBUG
+    Counter = 0
 
-    while not xbmc.getCondVisibility('Window.IsActive(10000)'):
+    while not xbmc.getCondVisibility('Window.IsActive(10000)') and Counter < 120: # timeout after 120 Seconds
         utils.sleep(1)
+        Counter += 1
 
     if utils.DebugLog: xbmc.log("EMBY.hooks.monitor (DEBUG): ---<[ wait for homescreen ]", 1) # LOGDEBUG
 
@@ -571,11 +573,11 @@ def setup():
 
         return "stop"
 
-    pluginmenu.factoryreset(True, favorites)
+    pluginmenu.factoryreset(True)
     return False
 
 def wait_PlayerEventsQueue():
-    if player.EmbyPlaying and player.PlayingItem[4]:
+    if player.EmbyPlaying and player.PlayingItem["EmbyServer"]:
         player.PlayerEventsQueue.put((("stop", '{"end":"quit"}'),))
         if utils.DebugLog: xbmc.log("EMBY.hooks.monitor (DEBUG): CONDITION: --->[ PlayerEventsQueue ]", 1) # LOGDEBUG
 
@@ -610,6 +612,7 @@ def StartUp():
         utils.start_thread(favorites.emby_change_Favorite, ())
         utils.start_thread(httpcache.clear, ())
         utils.start_thread(settingschanged, ())
+        utils.start_thread(artworkcache.delete_artworkcache_watchdog, ())
         XbmcMonitor = monitor()  # Init Monitor
         utils.start_thread(poll_Events, (XbmcMonitor,))
 
@@ -641,11 +644,17 @@ def StartUp():
             utils.start_thread(ServersConnect, ())
 
         utils.NextGenOnline.set()
+        utils.start_thread(init_widget_refresh, ())
 
         while not XbmcMonitor.waitForAbort(0.1):
             pass
 
     ShutDown()
+
+def init_widget_refresh():
+    utils.sleep(1)
+    utils.refresh_widgets(True)
+    utils.refresh_widgets(False)
 
 def ShutDown():
     global FullShutdown
@@ -669,6 +678,7 @@ def ShutDown():
         utils.SettingsChangedCondition.notify_all()
 
     player.PlayerEventsQueue.put("QUIT")
+    player.DeleteContentQueue.put("QUIT")
     utils.SystemShutdown = True
     utils.unset_SyncLock()
     utils.NextGenOnline.set()

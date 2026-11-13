@@ -1,3 +1,90 @@
+12.5.2
+=============
+adjust default paging limits
+fix favorites sync (toggle favorite sync option).
+
+
+
+12.5.1
+=============
+fix delete after watched deadlock
+fix specials sync (folder structure: other folders than "specials" are now supported) (https://github.com/MediaBrowser/plugin.video.emby/issues/601)
+fix Empty MediaStreams during sync erase Kodi-generated streamdetails for STRM/ISO items (https://github.com/MediaBrowser/plugin.video.emby/issues/599)
+fix Race condition when updating the last sync date/time causes automatic updates to be mistaken for user changes (Race condition when updating the last sync date/time causes automatic updates to be mistaken for user changes)
+fix duplicate cards in favorites when adding movie with multiple versions (https://github.com/MediaBrowser/plugin.video.emby/issues/596)
+fix theme play bug
+fix multiversion boxset assignment on updates
+
+
+
+12.5.0
+=============
+fix server timeouts
+fix metadata check
+Replace serveral blocking commands with async commands
+Remove additional blocking stat/HEAD request by disable dateadded=0 readings by advancedsettings.xml
+fix Emby connect
+fix websocket messages
+fix websocket refresh progressbar
+fix http rfc issues
+fix dynamic nodes actor images
+fix dynamic nodes double multicontent selection
+fix m3u musicplaylist player crash
+fix image fallbacks
+fix sync minor issue
+fix random singles node
+improve dynamic node caches
+fix artwork loading (Kodi) freezes
+improve content switch in dynamic nodes
+improve mimetype detection
+improve native mode content detection
+support Kodi tempo for remote playback
+fix several playback session sync issues
+support subbtitle and audiostream selection for remote sessions
+full ipv6 support (untested)
+add music discnumber info (for synced content)
+add music album release type info (for synced content)
+fix fanart artwork caching (Kodi 22)
+fix progress update sync issue
+fix Kodi scan issue (widget refresh)
+fix dynamic node music playlist (autoplay next was not supported)
+fix subtitle disable issue
+improve hash calculation
+support native chapter bookmark for addon mode (http protocol)
+improve hybrid node metadata
+fix MusicVideo artist hybrid node
+fix autoselect highest resolution in native mode
+fix sqlite _ and % escapes (caused false positiv on folder remove)
+fix theme issues
+improve theme also support music, album and musicvideo
+fix youtube content (untested)
+improve youtube id detection
+
+
+
+12.4.24
+=============
+Improve timeouts when server not avialable
+Add contextmenu option for album -> goto albumartist
+Kodi compatibility with MyVideos148.db
+Fix dynamic nodes progress updates
+Kodi compatibility with MyVideos149.db
+Fix picture slideshow
+Improve jsonrpc calls
+Fix remotely set repeat mode
+Fix subtitle selections
+Fix dynamic item remote playback cache
+Workaround Kodi, stop command via API results in a Kodi freeze for addon mode
+Fix theme play issue
+Workaround for Kodi 22 bug (plugin cannot read files)
+Fix cinema mode when youtube trailer is not playable
+disable transcoding options for webdav and pathsubstitution mode. Kodi does not support it, only for http
+change image handling
+fix icons when using multiple Emby servers
+several minor fixes
+
+
+
 12.4.23
 =============
 fix sync bug
