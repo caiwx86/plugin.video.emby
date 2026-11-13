@@ -269,6 +269,9 @@ def set_path_filename(Item, ServerId, MediaSource, isDynamic=False):
         return
 
     Container = Item.get('Container', "")
+    IsISO = str(Container).lower() == 'iso' or KodiPathLower.endswith(".iso")
+    UsePathSubstitution = IsISO and utils.use_ISO_PathSubstitution()
+    AddonModePath = "/emby_addon_mode/" if UsePathSubstitution else utils.AddonModePath
 
     # Special content type
     if Container == 'dvd':
@@ -292,7 +295,9 @@ def set_path_filename(Item, ServerId, MediaSource, isDynamic=False):
         return
 
     # Detect forced Nativemode
-    if Container == 'iso' or KodiPathLower.endswith(".iso"):
+    if UsePathSubstitution:
+        NativeMode = False
+    elif IsISO:
         NativeMode = True
     elif KodiPathLower.startswith("dav://") or KodiPathLower.startswith("davs://"):
         NativeMode = True
@@ -307,7 +312,7 @@ def set_path_filename(Item, ServerId, MediaSource, isDynamic=False):
         else:
             Item['KodiFilename'] = "unknown.jpg"
     elif Item['KodiPath']:
-        Item['KodiFilename'] = utils.get_Filename(Item['KodiPath'], NativeMode)
+        Item['KodiFilename'] = utils.get_Filename(Item['KodiPath'], NativeMode, UsePathSubstitution)
     else: # channels
         Item['KodiFilename'] = "unknown.ts"
         NativeMode = False
@@ -381,20 +386,20 @@ def set_path_filename(Item, ServerId, MediaSource, isDynamic=False):
             MetaFolder += f"-{MetadataSub}"
 
         if Item['Type'] == "Series":
-            Item['KodiPathParent'] = f"{utils.AddonModePath}{Dynamic}tvshows/{ServerId}/{Item['LibraryId']}/"
-            Item['KodiPath'] = f"{utils.AddonModePath}{Dynamic}tvshows/{ServerId}/{Item['LibraryId']}/0/{Item['Id']}/"
+            Item['KodiPathParent'] = f"{AddonModePath}{Dynamic}tvshows/{ServerId}/{Item['LibraryId']}/"
+            Item['KodiPath'] = f"{AddonModePath}{Dynamic}tvshows/{ServerId}/{Item['LibraryId']}/0/{Item['Id']}/"
         elif Item['Type'] == "Episode":
-            Item['KodiPath'] = f"{utils.AddonModePath}{Dynamic}tvshows/{ServerId}/{Item['LibraryId']}/{Item['SeriesId']}/{Item['Id']}/{MetaFolder}/"
+            Item['KodiPath'] = f"{AddonModePath}{Dynamic}tvshows/{ServerId}/{Item['LibraryId']}/{Item['SeriesId']}/{Item['Id']}/{MetaFolder}/"
         elif Item['Type'] == "Movie":
-            Item['KodiPath'] = f"{utils.AddonModePath}{Dynamic}movies/{ServerId}/{Item['LibraryId']}/0/{Item['Id']}/{MetaFolder}/"
+            Item['KodiPath'] = f"{AddonModePath}{Dynamic}movies/{ServerId}/{Item['LibraryId']}/0/{Item['Id']}/{MetaFolder}/"
         elif Item['Type'] == "Video":
-            Item['KodiPath'] = f"{utils.AddonModePath}{Dynamic}video/{ServerId}/{Item['LibraryId']}/0/{Item['Id']}/{MetaFolder}/"
+            Item['KodiPath'] = f"{AddonModePath}{Dynamic}video/{ServerId}/{Item['LibraryId']}/0/{Item['Id']}/{MetaFolder}/"
         elif Item['Type'] == "MusicVideo":
-            Item['KodiPath'] = f"{utils.AddonModePath}{Dynamic}musicvideos/{ServerId}/{Item['LibraryId']}/0/{Item['Id']}/{MetaFolder}/"
+            Item['KodiPath'] = f"{AddonModePath}{Dynamic}musicvideos/{ServerId}/{Item['LibraryId']}/0/{Item['Id']}/{MetaFolder}/"
         elif Item['Type'] == "TvChannel":
-            Item['KodiPath'] = f"{utils.AddonModePath}{Dynamic}livetv/{ServerId}/{Item['LibraryId']}/0/{Item['Id']}/{MetaFolder}/"
+            Item['KodiPath'] = f"{AddonModePath}{Dynamic}livetv/{ServerId}/{Item['LibraryId']}/0/{Item['Id']}/{MetaFolder}/"
         elif Item['Type'] == "Trailer":
-            Item['KodiPath'] = f"{utils.AddonModePath}{Dynamic}trailer/{ServerId}/{Item['LibraryId']}/0/{Item['Id']}/{MetaFolder}/"
+            Item['KodiPath'] = f"{AddonModePath}{Dynamic}trailer/{ServerId}/{Item['LibraryId']}/0/{Item['Id']}/{MetaFolder}/"
         elif Item['Type'] == "Audio":
             Item['KodiPath'] = f"http://127.0.0.1:57342/{Dynamic}audio/{ServerId}/{Item['LibraryId']}/0/{Item['Id']}/{MetaFolder}/"
 
@@ -407,7 +412,7 @@ def set_path_filename(Item, ServerId, MediaSource, isDynamic=False):
         if 'KodiPathParent' in Item:
             Item['KodiPathParent'] += "|redirect-limit=1000&failonerror=false"
 
-    if isHttpByEmby and utils.followhttp:
+    if isHttpByEmby and utils.followhttp and not UsePathSubstitution:
         Item['KodiPath'] = f'{Item["KodiPath"].replace("/emby_addon_mode/", "http://127.0.0.1:57342/").replace("dav://127.0.0.1:57342/", "http://127.0.0.1:57342/").replace("|redirect-limit=1000&failonerror=false", "")}|redirect-limit=1000&failonerror=false&connection-timeout={utils.followhttptimeout}'
         Item['KodiFullPath'] = f'{Item["KodiFullPath"].replace("/emby_addon_mode/", "http://127.0.0.1:57342/").replace("dav://127.0.0.1:57342/", "http://127.0.0.1:57342/").replace("|redirect-limit=1000&failonerror=false", "")}|redirect-limit=1000&failonerror=false&connection-timeout={utils.followhttptimeout}'
 

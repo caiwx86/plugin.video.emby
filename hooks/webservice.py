@@ -747,7 +747,10 @@ def GetRequest(client, Payload, isDelayedContent, isPicture, isAudio, isVideo):
             return
 
     if len(MetaData['MediaSources']) == 1 or utils.RemoteMode or (MetaData['MediaType'] in ("i", "v", "m") and not MetaData['isDynamic']): # no multiversion select for iso or movie/video -> Kodi takes care
-        if MetaData['MediaType'] == 'i':
+        # ISO files are addressed via path substitution in HTTP addon mode. Let
+        # the webservice stream them instead of replacing the item with a
+        # native path, which Kodi cannot open in this mode.
+        if MetaData['MediaType'] == 'i' and not utils.use_ISO_PathSubstitution():
             if add_DelayedContent(MetaData, client):
                 return
 
@@ -786,7 +789,7 @@ def GetRequest(client, Payload, isDelayedContent, isPicture, isAudio, isVideo):
             return
 
     # check if multiselection must be forced as native
-    if MetaData['MediaSources'][MetaData['SelectionIndexMediaSource']][0]['Path'].lower().endswith(".iso"):
+    if MetaData['MediaSources'][MetaData['SelectionIndexMediaSource']][0]['Path'].lower().endswith(".iso") and not utils.use_ISO_PathSubstitution():
         LoadISO(MetaData, client)
         return
 

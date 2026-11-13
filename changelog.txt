@@ -1,3 +1,9 @@
+12.5.2.2
+=============
+fix ISO playback in addon/http mode: ISO files now use Kodi path substitution, all other content keeps the HTTP webservice path
+
+
+
 12.5.2
 =============
 adjust default paging limits

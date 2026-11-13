@@ -1174,12 +1174,18 @@ def valid_Filename(Filename):
 
     return Filename.translate(ForbiddenCharecters)
 
-def get_Filename(Path, NativeMode):
+def use_ISO_PathSubstitution():
+    # Addon mode normally serves content via the local HTTP webservice. ISO
+    # files are the exception: Kodi only mounts them when the item path looks
+    # like a local .iso file, so use the path-substitution path for them.
+    return webservicemode == "http" and not useDirectPaths
+
+def get_Filename(Path, NativeMode, UsePathSubstitution=False):
     Separator = get_Path_Seperator(Path)
     Pos = Path.rfind(Separator)
     Filename = Path[Pos + 1:]
 
-    if not NativeMode and webservicemode != "pathsubstitution":
+    if not NativeMode and not UsePathSubstitution and webservicemode != "pathsubstitution":
         Filename = quote(Filename)
 
     return Filename
