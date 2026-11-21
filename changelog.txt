@@ -1,3 +1,9 @@
+12.5.2.5
+=============
+improve subtitle metadata compatibility: disambiguate six-field default/forced flags from older fork and upstream paths
+
+
+
 12.5.2.4
 =============
 fix default subtitle selection after the upstream subtitle refactor: prefer Emby's default track over stale Kodi per-file data, use the live Kodi stream mapping for embedded subtitles, and skip selection when playback has changed

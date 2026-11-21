@@ -153,7 +153,17 @@ def load_MetaData(Payload, isPicture, isAudio):
                             elif SubtitleStreamInfoIndex == 4:
                                 MediaSources[Index][3][SubtitleStreamIndex]['Codec'] = SubtitleStreamInfo
                             elif SubtitleStreamInfoIndex == 5:
-                                MediaSources[Index][3][SubtitleStreamIndex]['Default'] = bool(int(SubtitleStreamInfo))
+                                SubtitleValue = bool(int(SubtitleStreamInfo))
+
+                                # Six-field metadata was written by older fork builds
+                                # (default flag) and by upstream 12.5.x (forced flag).
+                                # Use the title to disambiguate forced tracks.
+                                SubtitleTitle = MediaSources[Index][3][SubtitleStreamIndex].get('DisplayTitle', '').lower()
+
+                                if len(SubtitleStreamInfos) == 6 and SubtitleValue and "forced" in SubtitleTitle and "default" not in SubtitleTitle:
+                                    MediaSources[Index][3][SubtitleStreamIndex]['Forced'] = True
+                                else:
+                                    MediaSources[Index][3][SubtitleStreamIndex]['Default'] = SubtitleValue
                             elif SubtitleStreamInfoIndex == 6:
                                 MediaSources[Index][3][SubtitleStreamIndex]['Forced'] = bool(int(SubtitleStreamInfo))
 
