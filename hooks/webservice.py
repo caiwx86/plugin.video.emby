@@ -1,4 +1,5 @@
 import threading
+import time
 from urllib.parse import parse_qsl
 import uuid
 import socket
@@ -548,7 +549,6 @@ def worker_Query(WorkerNumber):  # thread by caller
     if utils.DebugLog: xbmc.log(f"EMBY.hooks.webservice (DEBUG): THREAD: ---<[ worker_Query/{WorkerNumber} ] not running", 1) # LOGDEBUG
 
 def LoadISO(MetaData, client): # native content
-    player.MultiselectionDone = True
     Path = MetaData['MediaSources'][MetaData['SelectionIndexMediaSource']][0]['Path']
 
     if Path.startswith('\\\\'):
@@ -558,8 +558,14 @@ def LoadISO(MetaData, client): # native content
     ListItem = player.load_KodiItem("LoadISO", MetaData['KodiId'], MetaData['KodiType'], None, 0)
 
     if not ListItem:
+        player.MultiselectionDone = False
+        player.MultiselectionTime = 0
+        player.PlaylistRemoveItem = -1
+        player.PlaylistRemoveItemTime = 0
         client.send(sendOK)
     else:
+        player.MultiselectionDone = True
+        player.MultiselectionTime = time.time()
         set_QueuedPlayingItem(MetaData, None)
         player.replace_playlist_listitem(ListItem, MetaData['MediaSources'][MetaData['SelectionIndexMediaSource']][0]['Path'])
         set_DelayedContent(MetaData['ETag'], get_MediaHandler(MetaData['Payload']), 1, MetaData['KodiId'])
@@ -671,6 +677,7 @@ def GetRequest(client, Payload, isDelayedContent, isPicture, isAudio, isVideo):
     # Set player id
     if isVideo:
         player.PlaylistRemoveItem = -1
+        player.PlaylistRemoveItemTime = 0
         player.set_PlayerId({"player": {"playerid": 1}})
     elif isAudio:
         player.set_PlayerId({"player": {"playerid": 0}})

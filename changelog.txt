@@ -1,3 +1,9 @@
+12.5.2.7
+=============
+fix occasional playback failure after ISO exit: reset stale multiselection/playlist-remove state, clear the HTTP cache before the next playback, and skip removing a stale playlist item
+
+
+
 12.5.2.6
 =============
 add "Always enable the default subtitle" option (default on); prefer Simplified Chinese subtitles when Kodi's preferred subtitle language is Chinese; route HTTP-sourced ISO files through WebDAV and keep SMB/NFS/local ISO paths direct

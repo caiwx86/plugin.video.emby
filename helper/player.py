@@ -1,11 +1,12 @@
 import threading
 import random
+import time
 import uuid
 from urllib.parse import unquote_plus
 import json
 import xbmc
 from database import dbio
-from emby import listitem, metadata
+from emby import listitem, metadata, httpcache
 from core import common
 from dialogs import skipintrocredits
 from . import utils, playerops, queue, cache, copy
@@ -13,6 +14,7 @@ TrackerPaused = False
 VideoPlayback = "READY"
 VideoPlaybackOld = "READY"
 PlaylistRemoveItem = -1
+PlaylistRemoveItemTime = 0
 Volume = 100
 Muted = False
 CloseDialog = False
@@ -29,6 +31,7 @@ PlayingItem = {"EmbySessionData": {}, "IntroStartPositionTicks": 0, "IntroEndPos
 PlayingItemInit = {"EmbySessionData": {}, "IntroStartPositionTicks": 0, "IntroEndPositionTicks": 0, "CreditsPositionTicks": 0, "EmbyServer": None, "KodiType": "", "Filename": "", "IndexMappingVideoEmby": {}, "IndexMappingVideoKodi": {}, "IndexMappingAudioEmby": {}, "IndexMappingAudioKodi": {}, "IndexMappingSubtitleEmby": {}, "IndexMappingSubtitleKodi": {}, "SubtitleEnabled": False, "SubtitleIndexKodi": 0}
 QueuedPlayingItem = {}
 MultiselectionDone = False
+MultiselectionTime = 0
 PlaylistIndexContent = -2
 EmbyPlaying = False
 SkipIntroJumpDone = False
@@ -57,7 +60,9 @@ def PlayerCommands():
     global SkipIntroJumpDone
     global SkipCreditsJumpDone
     global PlaylistRemoveItem
+    global PlaylistRemoveItemTime
     global MultiselectionDone
+    global MultiselectionTime
     global QueuedPlayingItem
     global PlayingItemInit
     global Trailers
@@ -174,14 +179,20 @@ def PlayerCommands():
                 SkipIntroJumpDone = False
                 SkipCreditsJumpDone = False
 
-                # 3D, ISO etc. content from webserverice (addon mode)
+                # 3D, ISO etc. content from webservice (addon mode)
                 if PlaylistRemoveItem != -1:
-                    playerops.RemovePlaylistItem(1, PlaylistRemoveItem)
+                    if PlaylistRemoveItemTime and (time.time() - PlaylistRemoveItemTime) < 15:
+                        playerops.RemovePlaylistItem(1, PlaylistRemoveItem)
+                    else:
+                        xbmc.log(f"EMBY.helper.player: [ onAVStarted ] stale playlist item skipped: {PlaylistRemoveItem}", 1) # LOGINFO
+
                     PlaylistRemoveItem = -1
+                    PlaylistRemoveItemTime = 0
 
                 # multiselection done
                 if MultiselectionDone:
                     MultiselectionDone = False
+                    MultiselectionTime = 0
                     xbmc.log("EMBY.helper.player: --< [ onAVStarted ] multisiection done", 1) # LOGINFO
                     continue
 
@@ -257,6 +268,7 @@ def PlayerCommands():
                                     playerops.Unpause()
                                 else: # Reload new multiversion
                                     MultiselectionDone = True
+                                    MultiselectionTime = time.time()
                                     Path = MediaSources[MediaIndex]['Path']
                                     ListItem = load_KodiItem("onAVStarted", KodiId, KodiType, CachedItem, MediaIndex)
 
@@ -567,6 +579,10 @@ def PlayerCommands():
 
                     playerops.RemoteCommand(None, None, "stop")
                     playerops.Stopped = True
+                    MultiselectionDone = False
+                    MultiselectionTime = 0
+                    PlaylistRemoveItem = -1
+                    PlaylistRemoveItemTime = 0
 
                     if ResetPlayItem:
                         PlayItem = (0, "")
@@ -745,6 +761,10 @@ def stop_playback(delete, PlaybackEnded):
     global Trailers
     global EmbyPlaying
     global PlayingItem
+    global MultiselectionDone
+    global MultiselectionTime
+    global PlaylistRemoveItem
+    global PlaylistRemoveItemTime
 
     if utils.DebugLog: xbmc.log(f"EMBY.helper.player (DEBUG): [ played info ] {PlayingItem}", 1) # LOGDEBUG
     PlayingItemLocal = copy.Object(PlayingItem)
@@ -752,8 +772,15 @@ def stop_playback(delete, PlaybackEnded):
     playerops.PlaybackRate[playerops.PlayerId] = 1.0
 
     if MultiselectionDone:
-        if utils.DebugLog: xbmc.log("EMBY.helper.player (DEBUG): stop_playback MultiselectionDone", 1) # LOGDEBUG
-        return
+        if MultiselectionTime and (time.time() - MultiselectionTime) < 5:
+            if utils.DebugLog: xbmc.log("EMBY.helper.player (DEBUG): stop_playback MultiselectionDone", 1) # LOGDEBUG
+            return
+
+        xbmc.log("EMBY.helper.player: stop_playback stale MultiselectionDone, reset", 1) # LOGINFO
+        MultiselectionDone = False
+        MultiselectionTime = 0
+        PlaylistRemoveItem = -1
+        PlaylistRemoveItemTime = 0
 
     if not PlayingItemLocal["EmbyServer"]:
         xbmc.log("EMBY.helper.player: stop_playback no PlayingItemLocal", 2) # LOGWARNING
@@ -775,11 +802,17 @@ def stop_playback(delete, PlaybackEnded):
     if not utils.RemoteMode:
         utils.ItemSkipUpdate.append(str(PlayingItemLocal["EmbySessionData"]['ItemId'])) # Skip Emby progress updates as Kodi keeps track
 
-    # Stop the Emby session asynchronously so Kodi can close the player immediately.
+    # Drop the HTTP cache entry before the next playback can reuse it. The
+    # session stop itself stays asynchronous to keep closing playback fast.
+    if PlayingItemLocal["EmbySessionData"].get("PlaySessionId"):
+        httpcache.delete(PlayingItemLocal["EmbySessionData"]["PlaySessionId"])
+
     utils.start_thread(
         PlayingItemLocal["EmbyServer"].API.session_stop,
         (PlayingItemLocal["EmbySessionData"],)
     )
+    PlaylistRemoveItem = -1
+    PlaylistRemoveItemTime = 0
     close_SkipIntroDialog()
     close_SkipCreditsDialog()
 
@@ -941,11 +974,23 @@ def PositionTracker():
     global TrackerPaused
     global ProgressBarEnable
     global PicturePlaybackInit
+    global MultiselectionDone
+    global MultiselectionTime
+    global PlaylistRemoveItem
+    global PlaylistRemoveItemTime
     LoopCounter = 1
     if utils.DebugLog: xbmc.log("EMBY.helper.player (DEBUG): THREAD: --->[ position tracker ]", 1) # LOGDEBUG
     PlayerBusy = False
 
     while True:
+        # Reset stale multiselection state if the replacement item never starts.
+        if MultiselectionDone and (not MultiselectionTime or (time.time() - MultiselectionTime) > 15):
+            xbmc.log("EMBY.helper.player: reset stale multiselection state", 1) # LOGINFO
+            MultiselectionDone = False
+            MultiselectionTime = 0
+            PlaylistRemoveItem = -1
+            PlaylistRemoveItemTime = 0
+
         # Enable progress bars 5 seconds after playback stop
         if ProgressBarEnable == 0:
             if utils.DebugLog: xbmc.log("EMBY.helper.player [ position tracker ] eneable progress bars", 1) # LOGDEBUG
@@ -1146,7 +1191,9 @@ def load_KodiItem(TaskId, KodiItemId, Type, CachedItem, MediaSourceIndex):
 
 def replace_playlist_listitem(ListItem, Path):
     global PlaylistRemoveItem
+    global PlaylistRemoveItemTime
     PlaylistRemoveItem = playerops.GetPlaylistPosition(1) # old listitem will be removed after play next
+    PlaylistRemoveItemTime = time.time() if PlaylistRemoveItem != -1 else 0
     playerops.XbmcPlaylists[1].add(Path, ListItem, PlaylistRemoveItem + 1)
     load_queuePlayingItem()
 
