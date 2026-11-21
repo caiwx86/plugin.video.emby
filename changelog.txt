@@ -1,3 +1,9 @@
+12.5.2.8
+=============
+add an option to play SMB/NFS video files through direct paths instead of the Emby HTTP stream (faster start, disables cinema/transcoding for those files; requires a library resync)
+
+
+
 12.5.2.7
 =============
 fix occasional playback failure after ISO exit: reset stale multiselection/playlist-remove state, clear the HTTP cache before the next playback, and skip removing a stale playlist item

@@ -282,6 +282,7 @@ SyncHighestResolutionAsDefault = True
 SyncLocalOverPlugins = True
 AutoSelectHighestResolution = False
 ForceDefaultSubtitle = True
+PreferDirectVideoPaths = False
 NotifyEvents = False
 followhttp = False
 followhttptimeout = 5
@@ -1367,6 +1368,7 @@ def InitSettings():
     load_settings_bool('PauseRefreshGuide')
     load_settings_bool('PauseDownloadSubtitles')
     load_settings_bool('ForceDefaultSubtitle')
+    load_settings_bool('PreferDirectVideoPaths')
     load_settings_bool('PauseLocalYTrailersDownloadTask')
     load_settings_bool('PauseTVLocalThemeSongDownloadTask')
     load_settings_bool('PauseLocalThemeVideosDownloadTask')

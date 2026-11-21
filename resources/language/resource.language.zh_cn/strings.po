@@ -3768,3 +3768,11 @@ msgstr "始终启用默认字幕"
 msgctxt "#33901"
 msgid "Force the Emby default subtitle to be enabled even if Kodi has a per-file subtitle selection or subtitles are disabled."
 msgstr "即使 Kodi 已保存单文件字幕选择或字幕已关闭，也强制启用 Emby 默认字幕。"
+
+msgctxt "#33902"
+msgid "Prefer direct SMB/NFS paths for video"
+msgstr "视频优先使用 SMB/NFS 直连"
+
+msgctxt "#33903"
+msgid "Play SMB/NFS video files directly instead of through the Emby HTTP stream. This can start faster, but disables Emby cinema mode/transcoding and external subtitle handling for those files."
+msgstr "SMB/NFS 视频文件直接播放，不经过 Emby HTTP 流。启播更快，但这些文件将失去 Emby 影院模式/转码和外挂字幕处理。修改此选项后需要重新同步媒体库。"

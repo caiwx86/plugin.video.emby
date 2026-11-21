@@ -3766,3 +3766,11 @@ msgstr ""
 msgctxt "#33901"
 msgid "Force the Emby default subtitle to be enabled even if Kodi has a per-file subtitle selection or subtitles are disabled."
 msgstr ""
+
+msgctxt "#33902"
+msgid "Prefer direct SMB/NFS paths for video"
+msgstr ""
+
+msgctxt "#33903"
+msgid "Play SMB/NFS video files directly instead of through the Emby HTTP stream. This can start faster, but disables Emby cinema mode/transcoding and external subtitle handling for those files. A library resync is required after changing this option."
+msgstr ""
