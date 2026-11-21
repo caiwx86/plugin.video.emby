@@ -784,10 +784,10 @@ def GetRequest(client, Payload, isDelayedContent, isPicture, isAudio, isVideo):
             return
 
     if len(MetaData['MediaSources']) == 1 or utils.RemoteMode or (MetaData['MediaType'] in ("i", "v", "m") and not MetaData['isDynamic']): # no multiversion select for iso or movie/video -> Kodi takes care
-        # ISO files are addressed via path substitution in HTTP addon mode. Let
-        # the webservice stream them instead of replacing the item with a
+        # HTTP-sourced ISO files are addressed through the WebDAV endpoint.
+        # Let the webservice stream them instead of replacing the item with a
         # native path, which Kodi cannot open in this mode.
-        if MetaData['MediaType'] == 'i' and not utils.use_ISO_PathSubstitution():
+        if MetaData['MediaType'] == 'i' and not utils.use_ISO_WebDAV(MetaData['MediaSources'][MetaData['SelectionIndexMediaSource']][0]['Path']):
             if add_DelayedContent(MetaData, client):
                 return
 
@@ -826,7 +826,7 @@ def GetRequest(client, Payload, isDelayedContent, isPicture, isAudio, isVideo):
             return
 
     # check if multiselection must be forced as native
-    if MetaData['MediaSources'][MetaData['SelectionIndexMediaSource']][0]['Path'].lower().endswith(".iso") and not utils.use_ISO_PathSubstitution():
+    if MetaData['MediaSources'][MetaData['SelectionIndexMediaSource']][0]['Path'].lower().endswith(".iso") and not utils.use_ISO_WebDAV(MetaData['MediaSources'][MetaData['SelectionIndexMediaSource']][0]['Path']):
         LoadISO(MetaData, client)
         return
 
@@ -878,14 +878,49 @@ def SubTitlesAdd(MetaData):
         Language = Subtitle.get('language', '').lower()
         return bool(SubtitlesLanguageDefault) and (SubtitlesLanguageDefault in Title or SubtitlesLanguageDefault in Language or (SubtitlesLanguageDefault == "forced_only" and is_forced(Subtitle)))
 
+    def language_text(Subtitle):
+        return f"{Subtitle.get('DisplayTitle', '')} {Subtitle.get('language', '')}".lower()
+
+    def is_chinese(Subtitle):
+        Text = language_text(Subtitle)
+        return any(Marker in Text for Marker in ("chinese", "中文", "汉语", "漢語", "mandarin", "zho")) or Text.startswith("zh") or " zh" in Text or "zh-" in Text or "zh_" in Text or Text.endswith(" chi") or "chi-" in Text or "chi_" in Text
+
+    def is_simplified_chinese(Subtitle):
+        Text = language_text(Subtitle)
+        return any(Marker in Text for Marker in ("simplified", "简体", "简中", "简体中文", "chs", "zh-cn", "zh_cn", "zh-hans", "zhhans"))
+
+    def is_traditional_chinese(Subtitle):
+        Text = language_text(Subtitle)
+        return any(Marker in Text for Marker in ("traditional", "繁體", "繁体", "繁體中文", "繁体中文", "cht", "zh-tw", "zh_tw", "zh-hant", "zhhant"))
+
+    Preference = SubtitlesLanguageDefault.lower()
+    ChinesePreference = any(Marker in Preference for Marker in ("chinese", "中文", "汉语", "漢語", "mandarin", "zho")) or Preference.startswith("zh") or Preference.startswith("chi ") or Preference.startswith("chi-") or Preference.startswith("chi_") or "zh-" in Preference or "zh_" in Preference or Preference == "chi"
+    TraditionalPreference = any(Marker in Preference for Marker in ("traditional", "繁體", "繁体", "cht", "zh-tw", "zh_tw", "zh-hant", "zhhant"))
+
+    PreferredSubtitle = None
+
+    # If Kodi's preferred subtitle language is Chinese, choose Simplified
+    # Chinese first (unless Traditional Chinese was explicitly requested).
+    if ChinesePreference:
+        if TraditionalPreference:
+            FirstChinese = is_traditional_chinese
+        else:
+            FirstChinese = is_simplified_chinese
+
+        PreferredSubtitle = next((Subtitle for Subtitle in SubtitleStreams if Subtitle['external'] and FirstChinese(Subtitle)), None)
+        PreferredSubtitle = PreferredSubtitle or next((Subtitle for Subtitle in SubtitleStreams if not Subtitle['external'] and FirstChinese(Subtitle)), None)
+        PreferredSubtitle = PreferredSubtitle or next((Subtitle for Subtitle in SubtitleStreams if Subtitle['external'] and is_chinese(Subtitle)), None)
+        PreferredSubtitle = PreferredSubtitle or next((Subtitle for Subtitle in SubtitleStreams if not Subtitle['external'] and is_chinese(Subtitle)), None)
+
     # Prefer Emby's default track, especially ASS/SSA. A Kodi per-file selection
     # is used as a fallback when Emby has no default/preferred stream.
-    PreferredSubtitle = next((Subtitle for Subtitle in SubtitleStreams if Subtitle['external'] and is_default_ass(Subtitle)), None)
-    PreferredSubtitle = PreferredSubtitle or next((Subtitle for Subtitle in SubtitleStreams if not Subtitle['external'] and is_default_ass(Subtitle)), None)
-    PreferredSubtitle = PreferredSubtitle or next((Subtitle for Subtitle in SubtitleStreams if Subtitle['external'] and is_default(Subtitle)), None)
-    PreferredSubtitle = PreferredSubtitle or next((Subtitle for Subtitle in SubtitleStreams if not Subtitle['external'] and is_default(Subtitle)), None)
-    PreferredSubtitle = PreferredSubtitle or next((Subtitle for Subtitle in SubtitleStreams if Subtitle['external'] and matches_preference(Subtitle)), None)
-    PreferredSubtitle = PreferredSubtitle or next((Subtitle for Subtitle in SubtitleStreams if not Subtitle['external'] and matches_preference(Subtitle)), None)
+    if not PreferredSubtitle:
+        PreferredSubtitle = next((Subtitle for Subtitle in SubtitleStreams if Subtitle['external'] and is_default_ass(Subtitle)), None)
+        PreferredSubtitle = PreferredSubtitle or next((Subtitle for Subtitle in SubtitleStreams if not Subtitle['external'] and is_default_ass(Subtitle)), None)
+        PreferredSubtitle = PreferredSubtitle or next((Subtitle for Subtitle in SubtitleStreams if Subtitle['external'] and is_default(Subtitle)), None)
+        PreferredSubtitle = PreferredSubtitle or next((Subtitle for Subtitle in SubtitleStreams if not Subtitle['external'] and is_default(Subtitle)), None)
+        PreferredSubtitle = PreferredSubtitle or next((Subtitle for Subtitle in SubtitleStreams if Subtitle['external'] and matches_preference(Subtitle)), None)
+        PreferredSubtitle = PreferredSubtitle or next((Subtitle for Subtitle in SubtitleStreams if not Subtitle['external'] and matches_preference(Subtitle)), None)
 
     PreferredSubtitleIndex = -1
 
@@ -921,10 +956,12 @@ def SubTitlesAdd(MetaData):
 
         PreferredSubtitleIndex = IndexMappingSubtitleEmby.get(str(PreferredSubtitle['Index']), -1)
 
+    LanguagePreferred = bool(SubtitlesLanguageDefault) and PreferredSubtitle is not None and (matches_preference(PreferredSubtitle) or (ChinesePreference and is_chinese(PreferredSubtitle)))
+
     if PreferredSubtitleIndex != -1:
         playerops.SelectSubtitle(PreferredSubtitleIndex)
 
-        if is_default(PreferredSubtitle) and (not FileSettings or SubtitleIndexSelect == -1):
+        if (is_default(PreferredSubtitle) and (utils.ForceDefaultSubtitle or not FileSettings or SubtitleIndexSelect == -1)) or LanguagePreferred:
             SubtitleEnable = True
 
         playerops.EnableSubtitle(SubtitleEnable)

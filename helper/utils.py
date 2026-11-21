@@ -281,6 +281,7 @@ MaxURILength = 1500
 SyncHighestResolutionAsDefault = True
 SyncLocalOverPlugins = True
 AutoSelectHighestResolution = False
+ForceDefaultSubtitle = True
 NotifyEvents = False
 followhttp = False
 followhttptimeout = 5
@@ -1174,18 +1175,18 @@ def valid_Filename(Filename):
 
     return Filename.translate(ForbiddenCharecters)
 
-def use_ISO_PathSubstitution():
-    # Addon mode normally serves content via the local HTTP webservice. ISO
-    # files are the exception: Kodi only mounts them when the item path looks
-    # like a local .iso file, so use the path-substitution path for them.
-    return webservicemode == "http" and not useDirectPaths
+def use_ISO_WebDAV(Path):
+    # In addon mode, HTTP(S)-sourced ISO files are played through the local
+    # WebDAV endpoint. SMB/NFS/local paths are left to Kodi (and to Kodi's
+    # path substitution), because Kodi can mount those directly.
+    return not useDirectPaths and (Path or "").lower().startswith(("http://", "https://"))
 
-def get_Filename(Path, NativeMode, UsePathSubstitution=False):
+def get_Filename(Path, NativeMode, UsePathSubstitution=False, ForceQuote=False):
     Separator = get_Path_Seperator(Path)
     Pos = Path.rfind(Separator)
     Filename = Path[Pos + 1:]
 
-    if not NativeMode and not UsePathSubstitution and webservicemode != "pathsubstitution":
+    if not NativeMode and (ForceQuote or (not UsePathSubstitution and webservicemode != "pathsubstitution")):
         Filename = quote(Filename)
 
     return Filename
@@ -1365,6 +1366,7 @@ def InitSettings():
     load_settings_bool('PauseRefreshInternetChannels')
     load_settings_bool('PauseRefreshGuide')
     load_settings_bool('PauseDownloadSubtitles')
+    load_settings_bool('ForceDefaultSubtitle')
     load_settings_bool('PauseLocalYTrailersDownloadTask')
     load_settings_bool('PauseTVLocalThemeSongDownloadTask')
     load_settings_bool('PauseLocalThemeVideosDownloadTask')

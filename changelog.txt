@@ -1,3 +1,9 @@
+12.5.2.6
+=============
+add "Always enable the default subtitle" option (default on); prefer Simplified Chinese subtitles when Kodi's preferred subtitle language is Chinese; route HTTP-sourced ISO files through WebDAV and keep SMB/NFS/local ISO paths direct
+
+
+
 12.5.2.5
 =============
 improve subtitle metadata compatibility: disambiguate six-field default/forced flags from older fork and upstream paths

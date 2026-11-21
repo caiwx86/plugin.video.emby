@@ -3760,3 +3760,11 @@ msgstr "启用此功能需要完整重新同步"
 msgctxt "#33899"
 msgid "Favorite Audio"
 msgstr "收藏的音频"
+
+msgctxt "#33900"
+msgid "Always enable the default subtitle"
+msgstr "始终启用默认字幕"
+
+msgctxt "#33901"
+msgid "Force the Emby default subtitle to be enabled even if Kodi has a per-file subtitle selection or subtitles are disabled."
+msgstr "即使 Kodi 已保存单文件字幕选择或字幕已关闭，也强制启用 Emby 默认字幕。"

@@ -270,8 +270,8 @@ def set_path_filename(Item, ServerId, MediaSource, isDynamic=False):
 
     Container = Item.get('Container', "")
     IsISO = str(Container).lower() == 'iso' or KodiPathLower.endswith(".iso")
-    UsePathSubstitution = IsISO and utils.use_ISO_PathSubstitution()
-    AddonModePath = "/emby_addon_mode/" if UsePathSubstitution else utils.AddonModePath
+    UseWebDAV = IsISO and utils.use_ISO_WebDAV(Item['KodiPath'])
+    AddonModePath = "dav://127.0.0.1:57342/" if UseWebDAV else utils.AddonModePath
 
     # Special content type
     if Container == 'dvd':
@@ -295,7 +295,7 @@ def set_path_filename(Item, ServerId, MediaSource, isDynamic=False):
         return
 
     # Detect forced Nativemode
-    if UsePathSubstitution:
+    if UseWebDAV:
         NativeMode = False
     elif IsISO:
         NativeMode = True
@@ -312,7 +312,7 @@ def set_path_filename(Item, ServerId, MediaSource, isDynamic=False):
         else:
             Item['KodiFilename'] = "unknown.jpg"
     elif Item['KodiPath']:
-        Item['KodiFilename'] = utils.get_Filename(Item['KodiPath'], NativeMode, UsePathSubstitution)
+        Item['KodiFilename'] = utils.get_Filename(Item['KodiPath'], NativeMode, False, UseWebDAV)
     else: # channels
         Item['KodiFilename'] = "unknown.ts"
         NativeMode = False
@@ -412,7 +412,7 @@ def set_path_filename(Item, ServerId, MediaSource, isDynamic=False):
         if 'KodiPathParent' in Item:
             Item['KodiPathParent'] += "|redirect-limit=1000&failonerror=false"
 
-    if isHttpByEmby and utils.followhttp and not UsePathSubstitution:
+    if isHttpByEmby and utils.followhttp and not UseWebDAV:
         Item['KodiPath'] = f'{Item["KodiPath"].replace("/emby_addon_mode/", "http://127.0.0.1:57342/").replace("dav://127.0.0.1:57342/", "http://127.0.0.1:57342/").replace("|redirect-limit=1000&failonerror=false", "")}|redirect-limit=1000&failonerror=false&connection-timeout={utils.followhttptimeout}'
         Item['KodiFullPath'] = f'{Item["KodiFullPath"].replace("/emby_addon_mode/", "http://127.0.0.1:57342/").replace("dav://127.0.0.1:57342/", "http://127.0.0.1:57342/").replace("|redirect-limit=1000&failonerror=false", "")}|redirect-limit=1000&failonerror=false&connection-timeout={utils.followhttptimeout}'
 

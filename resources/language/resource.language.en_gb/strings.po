@@ -3758,3 +3758,11 @@ msgstr ""
 msgctxt "#33899"
 msgid "Favorite Audio"
 msgstr ""
+
+msgctxt "#33900"
+msgid "Always enable the default subtitle"
+msgstr ""
+
+msgctxt "#33901"
+msgid "Force the Emby default subtitle to be enabled even if Kodi has a per-file subtitle selection or subtitles are disabled."
+msgstr ""
