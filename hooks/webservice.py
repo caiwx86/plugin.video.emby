@@ -841,6 +841,9 @@ def SubTitlesAdd(MetaData):
     if not SubtitleStreams:
         return
 
+    if MetaData['EmbyId'] != EmbyIdCurrentlyPlaying:
+        return
+
     CounterSubTitle = 0
     SubtitleEnable = False
     SubtitleIndexSelect = -1
@@ -855,7 +858,7 @@ def SubTitlesAdd(MetaData):
 
         if FileSettings:
             SubtitleEnable = bool(FileSettings[9])
-            SubtitleIndexSelect = FileSettings[7]
+            SubtitleIndexSelect = FileSettings[7] if FileSettings[7] is not None else -1
         else:
             SubtitleEnable = SubtitleEnableDefault
     else:
@@ -867,13 +870,16 @@ def SubTitlesAdd(MetaData):
     def is_default_ass(Subtitle):
         return is_default(Subtitle) and Subtitle.get('Codec', '').lower() in ("ass", "ssa")
 
+    def is_forced(Subtitle):
+        return Subtitle.get('Forced', False) or "forced" in Subtitle.get('DisplayTitle', '').lower()
+
     def matches_preference(Subtitle):
         Title = Subtitle.get('DisplayTitle', '').lower()
         Language = Subtitle.get('language', '').lower()
-        return bool(SubtitlesLanguageDefault) and (SubtitlesLanguageDefault in Title or SubtitlesLanguageDefault in Language or (SubtitlesLanguageDefault == "forced_only" and Subtitle.get('Forced', False)))
+        return bool(SubtitlesLanguageDefault) and (SubtitlesLanguageDefault in Title or SubtitlesLanguageDefault in Language or (SubtitlesLanguageDefault == "forced_only" and is_forced(Subtitle)))
 
     # Prefer Emby's default track, especially ASS/SSA. A Kodi per-file selection
-    # still wins when one is stored in the video database.
+    # is used as a fallback when Emby has no default/preferred stream.
     PreferredSubtitle = next((Subtitle for Subtitle in SubtitleStreams if Subtitle['external'] and is_default_ass(Subtitle)), None)
     PreferredSubtitle = PreferredSubtitle or next((Subtitle for Subtitle in SubtitleStreams if not Subtitle['external'] and is_default_ass(Subtitle)), None)
     PreferredSubtitle = PreferredSubtitle or next((Subtitle for Subtitle in SubtitleStreams if Subtitle['external'] and is_default(Subtitle)), None)
@@ -905,17 +911,25 @@ def SubTitlesAdd(MetaData):
                 PreferredSubtitleIndex = SubtitleIndexAdded
 
     if PreferredSubtitle and not PreferredSubtitle['external']:
-        PreferredSubtitleIndex = MediaSource[0].get('IndexMappingSubtitleEmby', {}).get(str(PreferredSubtitle['Index']), -1)
+        IndexMappingSubtitleEmby = dict(MediaSource[0].get('IndexMappingSubtitleEmby', {}))
 
-    if SubtitleIndexSelect != -1:
-        playerops.SelectSubtitle(SubtitleIndexSelect)
-        playerops.EnableSubtitle(SubtitleEnable)
-    elif PreferredSubtitleIndex != -1:
+        if playerops.wait_AVStarted():
+            _, _, _, KodiMapping, _ = playerops.GetStreamInfo(IndexMappingSubtitleEmby, dict(MediaSource[0].get('IndexMappingSubtitleKodi', {})))
+
+            if KodiMapping:
+                IndexMappingSubtitleEmby = KodiMapping
+
+        PreferredSubtitleIndex = IndexMappingSubtitleEmby.get(str(PreferredSubtitle['Index']), -1)
+
+    if PreferredSubtitleIndex != -1:
         playerops.SelectSubtitle(PreferredSubtitleIndex)
 
-        if is_default(PreferredSubtitle) and not FileSettings:
+        if is_default(PreferredSubtitle) and (not FileSettings or SubtitleIndexSelect == -1):
             SubtitleEnable = True
 
+        playerops.EnableSubtitle(SubtitleEnable)
+    elif SubtitleIndexSelect != -1:
+        playerops.SelectSubtitle(SubtitleIndexSelect)
         playerops.EnableSubtitle(SubtitleEnable)
     elif SubtitleAdded:
         playerops.EnableSubtitle(False)

@@ -1,3 +1,9 @@
+12.5.2.4
+=============
+fix default subtitle selection after the upstream subtitle refactor: prefer Emby's default track over stale Kodi per-file data, use the live Kodi stream mapping for embedded subtitles, and skip selection when playback has changed
+
+
+
 12.5.2.3
 =============
 improve playback start: prioritize playback over artwork in the webservice queue, reduce redirect latency and avoid an extra wait for Emby readiness

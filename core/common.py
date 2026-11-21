@@ -364,12 +364,12 @@ def set_path_filename(Item, ServerId, MediaSource, isDynamic=False):
                 for KodiSubtitleStream in MediaSourceItem['KodiStreams']['Subtitle']:
                     # Keep "default" as the sixth field so metadata cached by earlier
                     # fork versions stays readable; "forced" is appended as seventh.
-                    if KodiSubtitleStream['default']:
+                    if KodiSubtitleStream.get('default', False):
                         isDefault = 1
                     else:
                         isDefault = 0
 
-                    if KodiSubtitleStream['forced']:
+                    if KodiSubtitleStream.get('forced', False):
                         isForced = 1
                     else:
                         isForced = 0
