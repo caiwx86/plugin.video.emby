@@ -251,6 +251,7 @@ LiveTVEnabled = False
 AssignEpisodePostersToTVShowPoster = False
 sslverify = False
 AddonModePath = "dav://127.0.0.1:57342/"
+LibraryPathSubstitutions = {}
 TranslationsCached = {}
 ScreenResolution = (1920, 1080)
 FavoriteQueue = None
@@ -1175,6 +1176,28 @@ def valid_Filename(Filename):
         if DebugLog: xbmc.log(f"Emby.helper.utils: Filename too long -> cut: {Filename}", 2) # LOGWARNING
 
     return Filename.translate(ForbiddenCharecters)
+
+def get_SubstitutedPath(ServerId, Path):
+    Substitutions = LibraryPathSubstitutions.get(ServerId)
+
+    if not Substitutions or not Path:
+        return ""
+
+    PathNormalized = Path.replace("\\", "/")
+    PathCompare = PathNormalized.lower()
+
+    for SubstitutionFrom, SubstitutionTo in Substitutions:
+        FromNormalized = SubstitutionFrom.replace("\\", "/").rstrip("/")
+
+        if not FromNormalized:
+            continue
+
+        FromCompare = FromNormalized.lower()
+
+        if PathCompare == FromCompare or PathCompare.startswith(FromCompare + "/"):
+            return SubstitutionTo.rstrip("/\\") + PathNormalized[len(FromNormalized):]
+
+    return ""
 
 def use_ISO_WebDAV(Path):
     # In addon mode, HTTP(S)-sourced ISO files are played through the local

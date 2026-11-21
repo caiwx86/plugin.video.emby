@@ -713,6 +713,41 @@ class API:
         _, _, Payload = self.http.request("GET", "Library/VirtualFolders/Query", {}, {}, False, "", None, "")
         return Payload
 
+    def get_path_substitutions(self):
+        try:
+            Payload = self.get_libraries()
+        except Exception:
+            return []
+
+        if isinstance(Payload, dict):
+            Payload = Payload.get("Items", [])
+
+        Substitutions = []
+
+        if isinstance(Payload, list):
+            for Library in Payload:
+                if not isinstance(Library, dict):
+                    continue
+
+                LibraryOptions = Library.get("LibraryOptions") or Library
+                PathInfos = LibraryOptions.get("PathInfos") or []
+
+                if isinstance(PathInfos, dict):
+                    PathInfos = list(PathInfos.values())
+
+                for PathInfo in PathInfos:
+                    if not isinstance(PathInfo, dict):
+                        continue
+
+                    Path = PathInfo.get("Path")
+                    NetworkPath = PathInfo.get("NetworkPath")
+
+                    if Path and NetworkPath and Path != NetworkPath:
+                        Substitutions.append((Path, NetworkPath))
+
+        Substitutions.sort(key=lambda Substitution: len(Substitution[0]), reverse=True)
+        return Substitutions
+
     def get_views(self):
         _, _, Payload = self.http.request("GET", f"Users/{self.ServerData['UserId']}/Views", {}, {}, False, "", None, "")
         return Payload

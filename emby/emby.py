@@ -102,6 +102,14 @@ class EmbyServer:
             utils.start_thread(self.Websocket.Message, ())
 
         self.http.start()
+
+        try:
+            utils.LibraryPathSubstitutions[self.ServerData['ServerId']] = self.API.get_path_substitutions()
+            xbmc.log(f"EMBY.emby.emby: Library path substitutions: {len(utils.LibraryPathSubstitutions[self.ServerData['ServerId']])}", 1) # LOGINFO
+        except Exception as Error:
+            utils.LibraryPathSubstitutions[self.ServerData['ServerId']] = []
+            xbmc.log(f"EMBY.emby.emby: Library path substitutions failed: {Error}", 2) # LOGWARNING
+
         utils.start_thread(self.library.KodiStartSync, (self.Firstrun,))  # start initial sync
         self.Firstrun = False
 

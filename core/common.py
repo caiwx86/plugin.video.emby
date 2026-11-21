@@ -234,6 +234,15 @@ def set_path_filename(Item, ServerId, MediaSource, isDynamic=False):
         xbmc.log(f"EMBY.core.common: No path found: {Item['Type']} / {Item['Name']}", 1) # LOGINFO
 
     Item['KodiPath'] = Path
+    PathSubstituted = False
+
+    # Apply Emby library path substitution (server path -> network path).
+    if not utils.useDirectPaths and ServerId and Item['Type'] in ("Movie", "Episode", "Video", "MusicVideo", "Trailer"):
+        SubstitutedPath = utils.get_SubstitutedPath(ServerId, Item['KodiPath'])
+
+        if SubstitutedPath:
+            Item['KodiPath'] = SubstitutedPath
+            PathSubstituted = True
 
     # Addonmode replace filextensions
     if Item['KodiPath'].endswith('.strm') and 'Container' in Item:
@@ -272,6 +281,7 @@ def set_path_filename(Item, ServerId, MediaSource, isDynamic=False):
     IsISO = str(Container).lower() == 'iso' or KodiPathLower.endswith(".iso")
     UseWebDAV = IsISO and utils.use_ISO_WebDAV(Item['KodiPath'])
     UseDirectVideoPath = not IsISO and utils.PreferDirectVideoPaths and Item['Type'] in ("Movie", "Episode", "Video", "MusicVideo") and KodiPathLower.startswith(("smb://", "nfs://", "dav://", "davs://"))
+    UseSubstitutedVideoPath = PathSubstituted and Item['Type'] in ("Movie", "Episode", "Video", "MusicVideo", "Trailer") and KodiPathLower.startswith(("smb://", "nfs://", "dav://", "davs://"))
     AddonModePath = "dav://127.0.0.1:57342/" if UseWebDAV else utils.AddonModePath
 
     # Special content type
@@ -298,7 +308,7 @@ def set_path_filename(Item, ServerId, MediaSource, isDynamic=False):
     # Detect forced Nativemode
     if UseWebDAV:
         NativeMode = False
-    elif IsISO or UseDirectVideoPath:
+    elif IsISO or UseDirectVideoPath or UseSubstitutedVideoPath:
         NativeMode = True
     elif KodiPathLower.startswith("dav://") or KodiPathLower.startswith("davs://"):
         NativeMode = True

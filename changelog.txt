@@ -1,3 +1,9 @@
+12.5.2.9
+=============
+detect Emby library path substitutions and use SMB/NFS/DAV direct paths for video files in plugin mode when a server path substitution exists
+
+
+
 12.5.2.8
 =============
 add an option to play SMB/NFS video files through direct paths instead of the Emby HTTP stream (faster start, disables cinema/transcoding for those files; requires a library resync)
