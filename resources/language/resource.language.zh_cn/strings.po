@@ -3774,5 +3774,5 @@ msgid "Prefer direct SMB/NFS paths for video"
 msgstr "视频优先使用 SMB/NFS 直连"
 
 msgctxt "#33903"
-msgid "Play SMB/NFS video files directly instead of through the Emby HTTP stream. This can start faster, but disables Emby cinema mode/transcoding and external subtitle handling for those files."
-msgstr "SMB/NFS 视频文件直接播放，不经过 Emby HTTP 流。启播更快，但这些文件将失去 Emby 影院模式/转码和外挂字幕处理。修改此选项后需要重新同步媒体库。"
+msgid "Enable direct playback for video files using SMB/NFS/DAV paths, including network paths from Emby library path substitution. When disabled, video uses the original plugin HTTP/WebDAV logic. Direct playback disables Emby cinema mode, transcoding and external subtitle handling for those files. A library resync and plugin restart are required after changing this option."
+msgstr "启用后视频使用 SMB/NFS/DAV 路径直连播放，包括 Emby 媒体库路径替换得到的网络路径；关闭后恢复插件原生 HTTP/WebDAV 逻辑。直连播放会使这些文件失去 Emby 影院模式、转码和外挂字幕处理。修改此选项后需要重新同步媒体库并重启插件。"

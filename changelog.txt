@@ -1,3 +1,9 @@
+12.5.2.10
+=============
+integrate direct video playback and Emby library path substitution under the "Prefer direct SMB/NFS paths for video" option (enabled by default); when disabled, use the original plugin HTTP/WebDAV logic
+
+
+
 12.5.2.9
 =============
 detect Emby library path substitutions and use SMB/NFS/DAV direct paths for video files in plugin mode when a server path substitution exists

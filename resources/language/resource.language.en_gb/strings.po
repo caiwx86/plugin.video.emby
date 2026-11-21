@@ -3772,5 +3772,5 @@ msgid "Prefer direct SMB/NFS paths for video"
 msgstr ""
 
 msgctxt "#33903"
-msgid "Play SMB/NFS video files directly instead of through the Emby HTTP stream. This can start faster, but disables Emby cinema mode/transcoding and external subtitle handling for those files. A library resync is required after changing this option."
+msgid "Enable direct playback for video files using SMB/NFS/DAV paths, including network paths from Emby library path substitution. When disabled, video uses the original plugin HTTP/WebDAV logic. Direct playback disables Emby cinema mode, transcoding and external subtitle handling for those files. A library resync and plugin restart are required after changing this option."
 msgstr ""
