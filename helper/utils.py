@@ -1177,6 +1177,56 @@ def valid_Filename(Filename):
 
     return Filename.translate(ForbiddenCharecters)
 
+def normalize_Path(Path):
+    if not Path:
+        return ""
+
+    Path = Path.replace("\\", "/")
+
+    if Path.startswith("//"):
+        Path = "smb://" + Path[2:]
+
+    if "://" in Path:
+        Protocol, Rest = Path.split("://", 1)
+        Path = f"{Protocol.lower()}://{Rest}"
+
+    return Path.rstrip("/")
+
+def get_OriginalPath(ServerId, Path):
+    Substitutions = LibraryPathSubstitutions.get(ServerId)
+
+    if not Substitutions or not Path:
+        return ""
+
+    PathNormalized = normalize_Path(Path)
+    PathCompare = PathNormalized.lower()
+
+    for SubstitutionFrom, SubstitutionTo in sorted(Substitutions, key=lambda Substitution: len(Substitution[1]), reverse=True):
+        ToNormalized = normalize_Path(SubstitutionTo)
+        ToCompare = ToNormalized.lower()
+
+        if not ToNormalized:
+            continue
+
+        if PathCompare == ToCompare or PathCompare.startswith(ToCompare + "/"):
+            Suffix = PathNormalized[len(ToNormalized):]
+
+            if "\\" in SubstitutionFrom:
+                Suffix = Suffix.replace("/", "\\")
+
+            return SubstitutionFrom.rstrip("/\\") + Suffix
+
+    return ""
+
+def get_MediaSourceId_by_Path(MediaSources, Path):
+    PathCompare = normalize_Path(Path).lower()
+
+    for MediaSource in MediaSources or []:
+        if normalize_Path(MediaSource.get("Path", "")).lower() == PathCompare:
+            return MediaSource.get("Id")
+
+    return None
+
 def get_SubstitutedPath(ServerId, Path):
     Substitutions = LibraryPathSubstitutions.get(ServerId)
 

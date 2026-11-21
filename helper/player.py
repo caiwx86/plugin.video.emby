@@ -194,7 +194,16 @@ def PlayerCommands():
                     MultiselectionDone = False
                     MultiselectionTime = 0
                     xbmc.log("EMBY.helper.player: --< [ onAVStarted ] multisiection done", 1) # LOGINFO
-                    continue
+                    QueuedFilename = QueuedPlayingItem.get("Filename", "")
+
+                    # LoadISO only queues the ISO item; the direct ISO can start
+                    # before the black placeholder consumed the flag. Let the
+                    # normal initialization run for the ISO so Emby session,
+                    # progress and history are created.
+                    if PlayingItem["EmbySessionData"] or not QueuedFilename or utils.normalize_Path(FullPath) != utils.normalize_Path(QueuedFilename):
+                        continue
+
+                    xbmc.log("EMBY.helper.player: [ onAVStarted ] initialize ISO/direct multiselection item", 1) # LOGINFO
 
                 EmbyId = 0
                 EmbyId, isAddonContent, isDynamic, EmbyType, MediaSources, CachedItem = find_EmbyContent(FullPath, KodiId, KodiType)
@@ -1267,7 +1276,7 @@ def find_EmbyContent(FullPath, KodiId, KodiType):
                             "CanSeek": not bool(KodiType == "channel"),
                             "IsPaused": False,
                             "ItemId": EmbyId,
-                            "MediaSourceId": MediaSources[0]["Id"],
+                            "MediaSourceId": utils.get_MediaSourceId_by_Path(MediaSources, FullPath) or MediaSources[0]["Id"],
                             "PlaySessionId": str(uuid.uuid4()).replace("-", ""),
                             "PositionTicks": 0,
                             "RunTimeTicks": 0,
@@ -1363,7 +1372,7 @@ def find_EmbyContent(FullPath, KodiId, KodiType):
                     "CanSeek": not bool(KodiType == "channel"),
                     "IsPaused": False,
                     "ItemId": CachedItem['Id'],
-                    "MediaSourceId": CachedItem['MediaSources'][0]["Id"],
+                    "MediaSourceId": utils.get_MediaSourceId_by_Path(CachedItem['MediaSources'], FullPath) or CachedItem['MediaSources'][0]["Id"],
                     "PlaySessionId": str(uuid.uuid4()).replace("-", ""),
                     "PositionTicks": 0,
                     "RunTimeTicks": 0,
@@ -1405,7 +1414,21 @@ def find_EmbyContent(FullPath, KodiId, KodiType):
                 continue
 
             MediaSourceId = embydb.get_mediasourceid_by_path(FullPath)
+
+            if not MediaSourceId:
+                OriginalPath = utils.get_OriginalPath(ServerId, FullPath)
+
+                if OriginalPath:
+                    MediaSourceId = embydb.get_mediasourceid_by_path(OriginalPath)
+
             _, EmbyType, MediaSources = embydb.get_metadata_by_EmbyId_EmbyType(EmbyId, EmbyType)
+
+            if not MediaSourceId:
+                MediaSourceId = utils.get_MediaSourceId_by_Path(MediaSources, FullPath)
+
+            if not MediaSourceId and MediaSources:
+                MediaSourceId = MediaSources[0].get("Id")
+
             dbio.DBCloseRO(ServerId, "onAVStarted")
 
             if not EmbyType or ServerId not in utils.EmbyServers:
