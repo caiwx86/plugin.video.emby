@@ -82,6 +82,21 @@ class VideoDatabase:
 
         return 0
 
+    def get_FileId_by_KodiId(self, KodiItemId, KodiType):
+        if KodiType in ("movie", "video"):
+            self.cursor.execute("SELECT idFile FROM movie WHERE idMovie = ?", (KodiItemId,))
+        elif KodiType == "episode":
+            self.cursor.execute("SELECT idFile FROM episode WHERE idEpisode = ?", (KodiItemId,))
+        elif KodiType == "musicvideo":
+            self.cursor.execute("SELECT idFile FROM musicvideo WHERE idMVideo = ?", (KodiItemId,))
+        elif KodiType == "videoversion":
+            self.cursor.execute("SELECT idFile FROM videoversion WHERE idMedia = ? AND media_type = ?", (KodiItemId, "movie"))
+        else:
+            return None
+
+        KodiFileId = self.cursor.fetchone()
+        return KodiFileId[0] if KodiFileId else None
+
     # Favorite for content
     def get_favoriteData(self, KodiFileId, KodiItemId, ContentType):
         Image = ""

@@ -9,7 +9,7 @@ from database import dbio
 from emby import listitem, metadata, httpcache
 from core import common
 from dialogs import skipintrocredits
-from . import utils, playerops, queue, cache, copy
+from . import utils, playerops, queue, cache, copy, subtitles, xmls
 TrackerPaused = False
 VideoPlayback = "READY"
 VideoPlaybackOld = "READY"
@@ -347,6 +347,9 @@ def PlayerCommands():
 
                 # Init Playback
                 init_EmbyPlayback()
+
+                if not isAddonContent:
+                    utils.start_thread(AddNativeSubtitles, (KodiId, KodiType, EmbyId))
 
                 if VideoPlayback == "CONTENT":
                     VideoPlayback = "READY"
@@ -1471,6 +1474,139 @@ def find_EmbyContent(FullPath, KodiId, KodiType):
         return 0, isAddonContent, isDynamic, "", [], {}
 
     return 0, isAddonContent, isDynamic, "", [], {}
+
+def AddNativeSubtitles(KodiId, KodiType, EmbyId):
+    if KodiType not in ("movie", "episode", "musicvideo", "video", "videoversion"):
+        return
+
+    if not PlayingItem["EmbyServer"] or not PlayingItem["EmbySessionData"]:
+        return
+
+    if playerops.EmbyIdPlaying != int(EmbyId) or PlayingItem["EmbySessionData"].get("ItemId") != int(EmbyId):
+        return
+
+    ServerId = PlayingItem["EmbyServer"].ServerData['ServerId']
+    MediaSourceId = PlayingItem["EmbySessionData"].get("MediaSourceId")
+    Settings = xmls.load_defaultvideosettings()
+    SubtitlesLanguageDefault = Settings.get("SubtitlesLanguage", "").lower()
+    SubtitleEnableDefault = Settings.get("ShowSubtitles", False)
+    FileSettings = None
+    KodiFileId = None
+
+    try:
+        videodb = dbio.DBOpenRO("video", "AddNativeSubtitles")
+        KodiFileId = videodb.get_FileId_by_KodiId(KodiId, KodiType)
+
+        if KodiFileId:
+            FileSettings = videodb.get_FileSettings(KodiFileId)
+
+        dbio.DBCloseRO("video", "AddNativeSubtitles")
+    except Exception as Error:
+        xbmc.log(f"EMBY.helper.player: Native subtitle file settings failed: {Error}", 2) # LOGWARNING
+
+    SubtitleEnable = False
+    SubtitleIndexSelect = -1
+
+    if FileSettings:
+        SubtitleEnable = bool(FileSettings[9])
+        SubtitleIndexSelect = FileSettings[7] if FileSettings[7] is not None else -1
+    else:
+        SubtitleEnable = SubtitleEnableDefault
+
+    try:
+        MediaSources = PlayingItem["EmbyServer"].API.get_PlaybackInfo(EmbyId)
+    except Exception as Error:
+        xbmc.log(f"EMBY.helper.player: Native subtitle metadata failed: {Error}", 2) # LOGWARNING
+        return
+
+    if not MediaSources:
+        return
+
+    if playerops.EmbyIdPlaying != int(EmbyId):
+        return
+
+    MediaSource = next((Source for Source in MediaSources if Source.get("Id") == MediaSourceId), MediaSources[0])
+    SubtitleStreams = []
+
+    for Stream in MediaSource.get("MediaStreams", []):
+        if Stream.get("Type") != "Subtitle":
+            continue
+
+        SubtitleStreams.append({
+            "Index": str(Stream.get("Index", "0")),
+            "language": Stream.get("Language", "undefined"),
+            "DisplayTitle": Stream.get("DisplayTitle", "undefined"),
+            "external": bool(Stream.get("IsExternal", False)),
+            "Codec": Stream.get("Codec", "") or "srt",
+            "Default": bool(Stream.get("IsDefault", False)),
+            "Forced": bool(Stream.get("IsForced", False)),
+        })
+
+    if not SubtitleStreams:
+        return
+
+    xbmc.log(f"EMBY.helper.player: [ AddNativeSubtitles ] {ServerId} / {EmbyId} / {len(SubtitleStreams)}", 1) # LOGINFO
+    PreferredSubtitle, ChinesePreference = subtitles.get_PreferredSubtitle(SubtitleStreams, SubtitlesLanguageDefault)
+    PreferredSubtitleIndex = -1
+    SubtitleAdded = False
+    CounterSubTitle = 0
+
+    for Subtitle in SubtitleStreams:
+        if not Subtitle["external"]:
+            continue
+
+        CounterSubTitle += 1
+
+        if playerops.EmbyIdPlaying != int(EmbyId):
+            return
+
+        try:
+            BinaryData = PlayingItem["EmbyServer"].API.get_Subtitle_Binary(EmbyId, MediaSource.get("Id", MediaSourceId), Subtitle["Index"], Subtitle["Codec"])
+        except Exception as Error:
+            xbmc.log(f"EMBY.helper.player: Native subtitle download failed: {Error}", 2) # LOGWARNING
+            continue
+
+        if not BinaryData:
+            continue
+
+        Language = Subtitle["language"]
+        Codec = Subtitle["Codec"]
+        Path = f"{utils.FolderEmbyTemp}{utils.valid_Filename(f'{CounterSubTitle}.{Language}.{Codec}')}"
+        utils.writeFile(Path, BinaryData)
+        SubtitleIndexAdded = playerops.AddSubtitle(Path)
+
+        if SubtitleIndexAdded != -1:
+            SubtitleAdded = True
+
+        if Subtitle is PreferredSubtitle:
+            PreferredSubtitleIndex = SubtitleIndexAdded
+
+    if PreferredSubtitle and not PreferredSubtitle["external"]:
+        IndexMappingSubtitleEmby = dict(PlayingItem["IndexMappingSubtitleEmby"])
+        IndexMappingSubtitleKodi = dict(PlayingItem["IndexMappingSubtitleKodi"])
+
+        if playerops.wait_AVStarted():
+            _, _, _, UpdatedIndexMappingSubtitleEmby, _ = playerops.GetStreamInfo(IndexMappingSubtitleEmby, IndexMappingSubtitleKodi)
+
+            if UpdatedIndexMappingSubtitleEmby:
+                IndexMappingSubtitleEmby = UpdatedIndexMappingSubtitleEmby
+
+        PreferredSubtitleIndex = IndexMappingSubtitleEmby.get(str(PreferredSubtitle["Index"]), -1)
+
+    LanguagePreferred = subtitles.is_LanguagePreferred(PreferredSubtitle, SubtitlesLanguageDefault, ChinesePreference)
+
+    if PreferredSubtitleIndex != -1:
+        playerops.SelectSubtitle(PreferredSubtitleIndex)
+
+        if (subtitles.is_default(PreferredSubtitle) and (utils.ForceDefaultSubtitle or not FileSettings or SubtitleIndexSelect == -1)) or LanguagePreferred:
+            SubtitleEnable = True
+
+        playerops.EnableSubtitle(SubtitleEnable)
+    elif SubtitleIndexSelect != -1:
+        playerops.SelectSubtitle(SubtitleIndexSelect)
+        playerops.EnableSubtitle(SubtitleEnable)
+    elif SubtitleAdded:
+        playerops.EnableSubtitle(False)
 
 def init_EmbyPlayback():
     if PlayingItem["EmbySessionData"]:

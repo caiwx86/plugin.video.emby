@@ -1,3 +1,9 @@
+12.5.2.12
+=============
+add native subtitle support for direct SMB/NFS/DAV video playback: download external Emby subtitles, apply Emby default/Chinese language preference and enable the selected subtitle while keeping direct playback
+
+
+
 12.5.2.11
 =============
 fix Emby playback progress/history for direct, path-substituted and ISO video playback: resolve MediaSourceId via reverse path substitution/normalized UNC-SMB paths and initialize the Emby session for ISO items that skip the multiselection placeholder
